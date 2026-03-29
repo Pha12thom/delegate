@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Delegate — AI Agent</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Fraunces:opsz,wght@9..144,300;9..144,500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0c0e10;--surface:#111417;--raised:#161a1e;
+  --border:#1d2228;--border2:#252c33;--muted:#374049;
+  --text:#e6e2d9;--sub:#6b7482;--sub2:#4a525c;
+  --accent:#c9f263;--accent2:#5b8af5;
+  --ok:#2dc840;--warn:#febc2e;--danger:#ff5f57;
+}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.app{display:grid;grid-template-rows:46px 1fr;height:100vh}
+.body-row{display:grid;grid-template-columns:252px 1fr;overflow:hidden}
+
+/* Topbar */
+header{background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:16px}
+.logo{font-family:'Fraunces',serif;font-size:19px;font-weight:500;letter-spacing:-.5px;flex-shrink:0}
+.logo span{color:var(--accent)}
+.vault-pill{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--sub);border:1px solid var(--border);border-radius:20px;padding:4px 12px}
+.dot{width:6px;height:6px;background:var(--ok);border-radius:50%;animation:pulse 2.5s infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.2}}
+.user-pill{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--sub);flex-shrink:0}
+.av{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--accent2),var(--accent));display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000}
+
+/* Sidebar */
+aside{background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;padding:12px 0 0}
+.sb-s{padding:0 12px;margin-bottom:20px}
+.sb-l{font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;padding:0 4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:6px;cursor:pointer;color:var(--sub);font-size:12px;transition:all .12s;border:1px solid transparent;margin-bottom:1px}
+.nav-item:hover{background:var(--border);color:var(--text)}
+.nav-item.active{background:rgba(201,242,99,.07);border-color:rgba(201,242,99,.16);color:var(--accent)}
+.conn{display:flex;align-items:center;gap:9px;padding:8px;border:1px solid var(--border);border-radius:7px;background:var(--bg);margin-bottom:5px}
+.ci{width:26px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px}
+.slack-bg{background:#4a154b}.notion-bg{background:#fff}
+.ci-info{flex:1;min-width:0}
+.ci-name{font-size:11px;color:var(--text)}
+.ci-ws{font-size:10px;color:var(--sub2)}
+.badge{font-size:9.5px;padding:2px 7px;border-radius:10px;flex-shrink:0;cursor:pointer;white-space:nowrap}
+.b-ok{background:rgba(45,200,64,.1);color:var(--ok);border:1px solid rgba(45,200,64,.22)}
+.b-warn{background:rgba(254,188,46,.1);color:var(--warn);border:1px solid rgba(254,188,46,.22)}
+.b-warn:hover{background:rgba(254,188,46,.2)}
+.perm{display:flex;align-items:center;gap:7px;padding:4px 2px;font-size:11px;border-bottom:1px solid var(--border)}
+.perm:last-child{border-bottom:none}
+.p-ok{color:var(--sub)}.p-no{color:var(--sub2);text-decoration:line-through}
+.ck{color:var(--ok);font-size:11px}.cx{color:var(--danger);font-size:11px}
+.sb-foot{margin-top:auto;padding:12px;border-top:1px solid var(--border)}
+.foot-v{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--sub)}
+
+/* Main */
+main{display:flex;flex-direction:column;overflow:hidden}
+.chat{flex:1;overflow-y:auto;padding:24px 28px;display:flex;flex-direction:column;gap:18px;scroll-behavior:smooth}
+.chat::-webkit-scrollbar{width:4px}
+.chat::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+
+/* Empty */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 20px;flex:1}
+.em{font-size:28px;color:var(--accent);margin-bottom:14px}
+.et{font-family:'Fraunces',serif;font-size:22px;font-weight:300;margin-bottom:8px}
+.es{font-size:12px;color:var(--sub);margin-bottom:24px}
+.hints{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:560px}
+.chip{font-family:inherit;font-size:11.5px;padding:6px 14px;border-radius:16px;border:1px solid var(--border2);color:var(--sub);background:var(--surface);cursor:pointer;transition:all .13s}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Messages */
+.msg{display:flex;gap:11px;animation:fadeUp .25s ease forwards}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.msg.user{flex-direction:row-reverse}
+.msg.user .mb{align-items:flex-end}
+.ma{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;margin-top:18px}
+.ma-a{background:var(--accent);color:#000}.ma-u{background:var(--accent2);color:#fff}
+.mb{display:flex;flex-direction:column;gap:5px;max-width:min(680px,82%)}
+.ms{font-size:10px;color:var(--sub);display:flex;align-items:center;gap:8px}
+.mt{color:var(--sub2)}
+.bbl{padding:10px 14px;border-radius:10px;line-height:1.75;font-size:12.5px;border:1px solid var(--border)}
+.bbl-a{background:var(--surface);border-radius:3px 10px 10px 10px;white-space:pre-wrap}
+.bbl-u{background:rgba(91,138,245,.1);border-color:rgba(91,138,245,.22);border-radius:10px 3px 10px 10px}
+.typing-bbl{display:flex;align-items:center;gap:5px;padding:14px !important}
+.td{width:5px;height:5px;background:var(--sub);border-radius:50%;animation:blink 1.2s infinite}
+.td:nth-child(2){animation-delay:.2s}.td:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
+.cursor{display:inline-block;width:2px;height:13px;background:var(--accent);margin-left:2px;vertical-align:text-bottom;animation:bc .7s infinite}
+@keyframes bc{0%,100%{opacity:1}50%{opacity:0}}
+
+/* Tool cards */
+.tcs{display:flex;flex-direction:column;gap:4px;margin-bottom:4px}
+.tc{border:1px solid var(--border2);border-radius:7px;overflow:hidden;font-size:11px;background:var(--bg)}
+.tc.done{border-color:rgba(45,200,64,.2)}.tc.err{border-color:rgba(255,95,87,.2)}.tc.pending{border-color:rgba(91,138,245,.2)}
+.tc-h{display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;background:rgba(255,255,255,.02);user-select:none}
+.tc-h:hover{background:rgba(255,255,255,.04)}
+.tc-name{flex:1;color:var(--accent2);font-weight:500}
+.tc-arrow{font-size:9px;color:var(--sub2);transition:transform .15s}
+.tc-arrow.open{transform:rotate(180deg)}
+.tc-body{padding:10px;border-top:1px solid var(--border);display:none}
+.tc-body.open{display:block}
+.tc-sl{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+pre.tcp{background:var(--raised);border-radius:5px;padding:8px 10px;font-size:10.5px;color:var(--sub);overflow-x:auto;white-space:pre-wrap;word-break:break-all;border:1px solid var(--border);max-height:180px;overflow-y:auto}
+pre.tcp.res{color:var(--text)}pre.tcp.er{color:var(--danger)}
+.spin{display:inline-block;animation:rot 1s linear infinite}
+@keyframes rot{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+/* Auth prompt */
+.ap{border:1px solid rgba(254,188,46,.28);border-radius:9px;padding:13px 15px;background:rgba(254,188,46,.04);margin-top:4px}
+.ap-t{font-size:11.5px;font-weight:500;color:var(--warn);margin-bottom:7px;display:flex;align-items:center;gap:6px}
+.ap-b{font-size:11.5px;color:var(--sub);line-height:1.7;margin-bottom:11px}
+.ap-btns{display:flex;gap:8px}
+.btn-ok{font-family:inherit;font-size:11px;font-weight:500;padding:6px 14px;border-radius:6px;background:var(--accent);color:#000;border:none;cursor:pointer;transition:opacity .13s}
+.btn-ok:hover{opacity:.82}
+.btn-no{font-family:inherit;font-size:11px;padding:6px 14px;border-radius:6px;background:none;color:var(--sub);border:1px solid var(--border);cursor:pointer;transition:all .13s}
+.btn-no:hover{border-color:var(--danger);color:var(--danger)}
+
+/* Input */
+.inp-area{border-top:1px solid var(--border);padding:12px 20px 14px;background:var(--surface);display:flex;flex-direction:column;gap:8px}
+.inp-wrap{display:flex;align-items:flex-end;gap:8px;border:1px solid var(--border2);border-radius:10px;background:var(--bg);padding:10px 12px;transition:border-color .15s}
+.inp-wrap:focus-within{border-color:var(--muted)}
+textarea{flex:1;background:none;border:none;outline:none;color:var(--text);font-family:'DM Mono',monospace;font-size:12.5px;resize:none;line-height:1.6;max-height:120px;min-height:20px}
+textarea::placeholder{color:var(--muted)}
+.send{width:30px;height:30px;border-radius:6px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .13s;background:var(--accent);color:#000;font-size:14px}
+.send:hover{opacity:.82}
+.send.stop{background:var(--danger);color:#fff;font-size:11px}
+.inp-foot{font-size:10px;color:var(--sub2);text-align:center}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+</style>
+</head>
+<body>
+<div class="app">
+
+<header>
+  <div class="logo">Dele<span>gate</span></div>
+  <div class="vault-pill"><div class="dot"></div>Auth0 Token Vault · Secured</div>
+  <div class="user-pill"><div class="av">AK</div><span>Alex K.</span></div>
+</header>
+
+<div class="body-row">
+<aside>
+  <div class="sb-s">
+    <div class="sb-l">Navigation</div>
+    <div class="nav-item active"><span>✦</span> Agent Chat</div>
+    <div class="nav-item"><span>◎</span> Activity Log</div>
+    <div class="nav-item"><span>⊞</span> Automations</div>
+    <div class="nav-item"><span>⚙</span> Settings</div>
+  </div>
+  <div class="sb-s">
+    <div class="sb-l">Connections</div>
+    <div class="conn">
+      <div class="ci slack-bg">💬</div>
+      <div class="ci-info"><div class="ci-name">Slack</div><div class="ci-ws">acme-co workspace</div></div>
+      <span class="badge b-ok">Connected</span>
+    </div>
+    <div class="conn">
+      <div class="ci notion-bg">📄</div>
+      <div class="ci-info"><div class="ci-name">Notion</div><div class="ci-ws">personal workspace</div></div>
+      <span class="badge b-warn" id="notionBadge" onclick="triggerNotionAuth()">Connect ↗</span>
+    </div>
+  </div>
+  <div class="sb-s">
+    <div class="sb-l">Granted Permissions</div>
+    <div class="perm"><span class="ck">✓</span><span class="p-ok">Read Slack messages</span></div>
+    <div class="perm"><span class="ck">✓</span><span class="p-ok">Post to Slack channels</span></div>
+    <div class="perm"><span id="pr1" class="cx">✗</span><span id="pr1l" class="p-no">Read Notion pages</span></div>
+    <div class="perm"><span id="pr2" class="cx">✗</span><span id="pr2l" class="p-no">Create Notion pages</span></div>
+    <div class="perm"><span class="cx">✗</span><span class="p-no">Delete Slack messages</span></div>
+    <div class="perm"><span class="cx">✗</span><span class="p-no">Share Notion externally</span></div>
+  </div>
+  <div class="sb-foot"><div class="foot-v"><div class="dot"></div>Auth0 Token Vault · Active</div></div>
+</aside>
+
+<main>
+  <div class="chat" id="chat">
+    <div class="empty" id="empty">
+      <div class="em">✦</div>
+      <div class="et">What should I handle?</div>
+      <div class="es">Ask me to read Slack, summarize threads, or create Notion pages.</div>
+      <div class="hints">
+        <button class="chip" onclick="runDemo('Summarize #eng-alerts from the last 24 hours and create a Notion digest')">Summarize #eng-alerts → Notion</button>
+        <button class="chip" onclick="runDemo('Draft my standup from Slack activity')">Draft standup update</button>
+        <button class="chip" onclick="runDemo('What is urgent in #product this week?')">What's urgent in #product?</button>
+        <button class="chip" onclick="runDemo('Post a status update to #general')">Post to #general</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="inp-area">
+    <div class="inp-wrap">
+      <textarea id="ta" placeholder="Ask Delegate to do something…" rows="1"
+        oninput="resize(this)" onkeydown="hk(event)"></textarea>
+      <button class="send" id="sendBtn" onclick="hs()">↑</button>
+    </div>
+    <div class="inp-foot">Delegate · Slack + Notion · Secured by Auth0 Token Vault · Powered by Claude</div>
+  </div>
+</main>
+</div>
+</div>
+
+<script>
+let notionOk = false, streaming = false, msgN = 0;
+
+function resize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px'}
+function hk(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();hs()}}
+function hs(){const t=document.getElementById('ta').value.trim();if(!t||streaming)return;document.getElementById('ta').value='';runDemo(t)}
+function scroll(){const c=document.getElementById('chat');c.scrollTop=c.scrollHeight}
+function now(){return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function hideEmpty(){const e=document.getElementById('empty');if(e)e.remove()}
+
+function setStreaming(v){
+  streaming=v;
+  const b=document.getElementById('sendBtn');
+  if(v){b.className='send stop';b.textContent='■';b.onclick=()=>endStream()}
+  else{b.className='send';b.textContent='↑';b.onclick=hs}
+}
+function endStream(){setStreaming(false)}
+
+function userMsg(text){
+  hideEmpty();
+  const c=document.getElementById('chat');
+  const d=document.createElement('div');
+  d.className='msg user';
+  d.innerHTML=`<div class="ma ma-u">AK</div><div class="mb"><div class="ms">You <span class="mt">${now()}</span></div><div class="bbl bbl-u">${esc(text)}</div></div>`;
+  c.appendChild(d);scroll();
+}
+
+function agentMsg(id){
+  hideEmpty();
+  const c=document.getElementById('chat');
+  const d=document.createElement('div');
+  d.className='msg';d.id='msg'+id;
+  d.innerHTML=`<div class="ma ma-a">D</div><div class="mb" id="mb${id}"><div class="ms">Delegate · Agent <span class="mt">${now()}</span></div><div class="tcs" id="tcs${id}"></div><div class="bbl bbl-a typing-bbl" id="typ${id}"><div class="td"></div><div class="td"></div><div class="td"></div></div></div>`;
+  c.appendChild(d);scroll();
+}
+
+function rmTyping(id){const t=document.getElementById('typ'+id);if(t)t.remove()}
+
+function streamText(id,text,cb){
+  rmTyping(id);
+  const mb=document.getElementById('mb'+id);
+  const b=document.createElement('div');
+  b.className='bbl bbl-a';b.id='bbl'+id;
+  const txt=document.createTextNode('');
+  const cur=document.createElement('span');cur.className='cursor';
+  b.appendChild(txt);b.appendChild(cur);
+  mb.appendChild(b);
+  let i=0;
+  const iv=setInterval(()=>{
+    i=Math.min(i+3,text.length);
+    txt.textContent=text.slice(0,i);
+    scroll();
+    if(i>=text.length){clearInterval(iv);cur.remove();cb&&cb()}
+  },16);
+}
+
+function addBubble(id,text){
+  rmTyping(id);
+  const mb=document.getElementById('mb'+id);
+  const b=document.createElement('div');
+  b.className='bbl bbl-a';b.textContent=text;
+  mb.appendChild(b);scroll();
+}
+
+// Tool cards
+function addTool(id,tool,input){
+  const tcs=document.getElementById('tcs'+id);
+  const cid='tc'+id+tool;
+  const svc=tool.startsWith('slack')?'💬':'📄';
+  const d=document.createElement('div');
+  d.className='tc pending';d.id=cid;
+  d.innerHTML=`<div class="tc-h" onclick="toggleTc('${cid}')"><span>${svc}</span><span class="tc-name">${tool.replace(/_/g,' ')}</span><span id="${cid}st"><span class="spin">⟳</span></span><span class="tc-arrow" id="${cid}ar">▼</span></div><div class="tc-body" id="${cid}bd"><div class="tc-sl">Input</div><pre class="tcp">${esc(JSON.stringify(input,null,2))}</pre><div id="${cid}res"></div></div>`;
+  tcs.appendChild(d);scroll();
+  return cid;
+}
+
+function doneTool(cid,result,isErr){
+  const d=document.getElementById(cid);if(!d)return;
+  d.className='tc '+(isErr?'err':'done');
+  document.getElementById(cid+'st').innerHTML=isErr?'<span style="color:var(--danger)">✗</span>':'<span style="color:var(--ok)">✓</span>';
+  const res=document.getElementById(cid+'res');
+  if(res){
+    const label=isErr?'Error':'Result';
+    const cls=isErr?'er':'res';
+    const val=typeof result==='string'?esc(result):esc(JSON.stringify(result,null,2).slice(0,500));
+    res.innerHTML=`<div class="tc-sl" style="margin-top:8px;${isErr?'color:var(--danger)':''}">${label}</div><pre class="tcp ${cls}">${val}</pre>`;
+  }
+}
+
+function toggleTc(cid){
+  document.getElementById(cid+'bd').classList.toggle('open');
+  document.getElementById(cid+'ar').classList.toggle('open');
+}
+
+function authPrompt(id,conn){
+  const mb=document.getElementById('mb'+id);
+  const name=conn[0].toUpperCase()+conn.slice(1);
+  const d=document.createElement('div');d.className='ap';d.id='ap'+id;
+  d.innerHTML=`<div class="ap-t">🔐 Auth0 Token Vault — Consent Required</div><p class="ap-b">To access <strong>${name}</strong>, I need a vault token. Auth0 handles the OAuth flow — your credentials stay encrypted. Delegate receives only a scoped, short-lived access token.</p><div class="ap-btns"><button class="btn-ok" onclick="approve('${id}','${conn}')">Authorize ${name} via Auth0</button><button class="btn-no" onclick="document.getElementById('ap${id}').remove()">Dismiss</button></div>`;
+  mb.appendChild(d);scroll();
+}
+
+function approve(id,conn){
+  document.getElementById('ap'+id)?.remove();
+  if(conn==='notion'){
+    notionOk=true;
+    const nb=document.getElementById('notionBadge');
+    nb.textContent='Connected';nb.className='badge b-ok';
+    ['pr1','pr2'].forEach(x=>{const e=document.getElementById(x);e.className='ck';e.textContent='✓'});
+    ['pr1l','pr2l'].forEach(x=>{const e=document.getElementById(x);e.className='p-ok';e.style.textDecoration=''});
+  }
+  continueAfterAuth(id,conn);
+}
+
+function continueAfterAuth(id,conn){
+  setStreaming(true);
+  if(conn==='notion'){
+    setTimeout(()=>{
+      const c=addTool(id,'notion_create_page',{title:'Eng Alerts Digest — Today',content:'## Summary\n- 1 failed deploy (resolved)\n- 1 action item: rotate staging credentials',token:'[vault:notion]'});
+      setTimeout(()=>{
+        doneTool(c,{id:'abc-123',title:'Eng Alerts Digest — Today',url:'https://notion.so/abc-123',created_time:new Date().toISOString()});
+        setTimeout(()=>{
+          streamText(id,'Done. Here\'s what I found in #eng-alerts:\n\n• 08:14 — api-gateway deploy failed (OOM). @devops notified.\n• 11:32 — Resolved: deploy succeeded after memory limit increase.\n• 14:47 — Action needed: rotate staging credentials before Friday.\n\nNotion page created: "Eng Alerts Digest — Today"\n\nWant me to post a link to #general, or set a reminder for the credential rotation?',endStream);
+        },400);
+      },1200);
+    },300);
+  }
+}
+
+function triggerNotionAuth(){
+  hideEmpty();
+  const id=++msgN;
+  setStreaming(true);
+  agentMsg(id);
+  setTimeout(()=>{
+    streamText(id,'To connect Notion, Auth0 will open an OAuth flow. Your credentials stay encrypted in Token Vault — I only receive a scoped access token.',()=>{
+      authPrompt(id,'notion');
+      endStream();
+    });
+  },400);
+}
+
+// ── Scenarios ──
+function runDemo(text){
+  if(streaming)return;
+  setStreaming(true);
+  userMsg(text);
+  const id=++msgN;
+  agentMsg(id);
+  const l=text.toLowerCase();
+  if(l.includes('eng-alert')||l.includes('digest'))scSlackNotion(id);
+  else if(l.includes('standup'))scStandup(id);
+  else if(l.includes('product')||l.includes('urgent'))scUrgent(id);
+  else if(l.includes('post')||l.includes('general'))scPost(id);
+  else scGeneric(id);
+}
+
+function scSlackNotion(id){
+  setTimeout(()=>{
+    const c=addTool(id,'slack_get_messages',{channel:'#eng-alerts',hours_back:24,token:'[vault:slack]'});
+    setTimeout(()=>{
+      doneTool(c,[
+        {ts:'08:14',user:'deploy-bot',text:'api-gateway deploy FAILED — OOM on build step'},
+        {ts:'11:32',user:'jay',text:'Resolved: api-gateway deploy succeeded after memory limit bump'},
+        {ts:'14:47',user:'sam',text:'Reminder: rotate staging credentials before Friday'},
+      ]);
+      if(!notionOk){
+        setTimeout(()=>{
+          streamText(id,'Fetched 3 alerts from #eng-alerts. To create the Notion digest, I need your Notion vault token.',()=>{
+            authPrompt(id,'notion');endStream();
+          });
+        },400);
+      } else {
+        continueAfterAuth(id,'notion');
+      }
+    },1400);
+  },600);
+}
+
+function scStandup(id){
+  setTimeout(()=>{
+    const c1=addTool(id,'slack_get_messages',{channel:'#general',hours_back:24,token:'[vault:slack]'});
+    setTimeout(()=>{
+      doneTool(c1,[{user:'alex',text:'Shipped auth middleware PR'},{user:'alex',text:'Reviewing settings page design'}]);
+      const c2=addTool(id,'slack_get_messages',{channel:'#eng-alerts',hours_back:24,token:'[vault:slack]'});
+      setTimeout(()=>{
+        doneTool(c2,[{user:'deploy-bot',text:'api-gateway resolved'}]);
+        setTimeout(()=>{
+          streamText(id,'Here\'s a standup draft based on your Slack activity:\n\nYesterday\n• Shipped the auth middleware PR\n• Started reviewing the settings page design\n\nToday\n• Continue settings page review\n• Monitor api-gateway (deploy resolved)\n\nBlockers\n• None\n\nWant me to post this to #standup, or edit anything first?',endStream);
+        },400);
+      },1000);
+    },1200);
+  },600);
+}
+
+function scUrgent(id){
+  setTimeout(()=>{
+    const c=addTool(id,'slack_get_messages',{channel:'#product',hours_back:168,token:'[vault:slack]'});
+    setTimeout(()=>{
+      doneTool(c,[
+        {user:'priya',text:'Q3 roadmap review Tuesday — need async prep'},
+        {user:'tom',text:'URGENT: pricing page conversion down 18% this week'},
+        {user:'alex',text:'Onboarding V2 design review Thursday 2pm'},
+      ]);
+      setTimeout(()=>{
+        streamText(id,'Here\'s what\'s urgent in #product this week:\n\n🔴 High priority\n• Pricing page conversion dropped 18% — data pull needed (tom, urgent)\n\n🟡 Coming up\n• Q3 roadmap review Tuesday — async prep expected\n• Onboarding V2 design review Thursday at 2pm\n\nWant me to create a Notion tracking page, or dig into any of these?',endStream);
+      },400);
+    },1400);
+  },600);
+}
+
+function scPost(id){
+  setTimeout(()=>{
+    streamText(id,'What would you like to post? Give me the content and I\'ll draft it for your review before sending — I won\'t post without your confirmation.',endStream);
+  },600);
+}
+
+function scGeneric(id){
+  setTimeout(()=>{
+    streamText(id,'I can help with that. I have access to your Slack workspace'+(notionOk?' and Notion':' (Notion needs authorization)')+'.\n\nTell me more about what you\'d like and I\'ll get started.',endStream);
+  },700);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+import "dotenv/config";
+import express from "express";
+import cors from "cors";
+import morgan from "morgan";
+import { agentRouter } from "./routes/agent";
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// ─── Middleware ──────────────────────────────────
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    credentials: true,
+  })
+);
+app.use(morgan("dev"));
+app.use(express.json());
+
+// ─── Routes ──────────────────────────────────────
+app.use("/api", agentRouter);
+
+// ─── Start ───────────────────────────────────────
+app.listen(PORT, () => {
+  console.log(`\n🔐 Delegate API running on http://localhost:${PORT}`);
+  console.log(`   Auth0 domain : ${process.env.AUTH0_DOMAIN}`);
+  console.log(`   Token Vault  : active`);
+  console.log(`   Tools        : slack, notion\n`);
+});
+
+export default app;
