@@ -118,7 +118,7 @@ export async function postMessage(
   const result = await client.chat.postMessage({
     channel: channelId,
     text,
-    blocks: options.blocks,
+    ...(options.blocks ? { blocks: options.blocks as any } : {}),
   });
 
   return { ts: result.ts!, channel: result.channel! };

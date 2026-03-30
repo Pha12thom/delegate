@@ -40,6 +40,20 @@ export function useAgent() {
       const res = await fetch("/api/connections", {
         headers: { Authorization: `Bearer ${token}` },
       });
+
+      if (!res.ok) {
+        let details = `HTTP ${res.status}`;
+        try {
+          const errorData = await res.json();
+          if (errorData?.error) {
+            details = `${details}: ${errorData.error}`;
+          }
+        } catch {
+          // ignore non-JSON body
+        }
+        throw new Error(`Failed to fetch connections (${details})`);
+      }
+
       const data = await res.json();
       setConnections(data.connections || []);
     } catch (err) {

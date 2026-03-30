@@ -2,6 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useAgent, ChatMessage, ToolCallEvent } from "./hooks/useAgent";
 
+const viteEnv = ((import.meta as any)?.env ?? {}) as Record<string, string | undefined>;
+
+const AUTH0_CONNECTIONS = {
+  slack: viteEnv.VITE_AUTH0_CONNECTION_SLACK || "sign-in-with-slack",
+  notion: viteEnv.VITE_AUTH0_CONNECTION_NOTION || "notion",
+  discord: viteEnv.VITE_AUTH0_CONNECTION_DISCORD || "discord",
+} as const;
+
+// ─── DEBUG: Log env vars and connections ────
+console.log("🔧 DEBUG: Vite Env Variables:");
+console.log("  VITE_AUTH0_CONNECTION_SLACK:", viteEnv.VITE_AUTH0_CONNECTION_SLACK);
+console.log("  VITE_AUTH0_CONNECTION_NOTION:", viteEnv.VITE_AUTH0_CONNECTION_NOTION);
+console.log("  VITE_AUTH0_CONNECTION_DISCORD:", viteEnv.VITE_AUTH0_CONNECTION_DISCORD);
+console.log("🔧 DEBUG: AUTH0_CONNECTIONS object:", AUTH0_CONNECTIONS);
+
 // ─── Icons (inline SVG components) ────────────────
 
 const IconSend = () => (
@@ -97,6 +112,15 @@ function AuthPrompt({ connection, onDismiss }: { connection: string; onDismiss: 
   const { loginWithRedirect } = useAuth0();
   const Icon = connection === "slack" ? IconSlack : connection === "discord" ? IconDiscord : IconNotion;
   const name = connection.charAt(0).toUpperCase() + connection.slice(1);
+  const auth0ConnectionName =
+    connection === "slack"
+      ? AUTH0_CONNECTIONS.slack
+      : connection === "discord"
+        ? AUTH0_CONNECTIONS.discord
+        : AUTH0_CONNECTIONS.notion;
+
+  console.log(`🔐 DEBUG: AuthPrompt rendered for "${connection}"`);
+  console.log(`  -> Auth0 connection name: "${auth0ConnectionName}"`);
 
   return (
     <div className="auth-prompt">
@@ -107,9 +131,15 @@ function AuthPrompt({ connection, onDismiss }: { connection: string; onDismiss: 
         Delegate only receives a scoped, time-limited access token.
       </p>
       <div className="ap-btns">
-        <button className="btn-approve" onClick={() => loginWithRedirect({
-          authorizationParams: { connection, scope: "openid profile email" }
-        })}>
+        <button
+          className="btn-approve"
+          onClick={() => {
+            sessionStorage.setItem("delegate:pending-connection", connection);
+            loginWithRedirect({
+              authorizationParams: { connection: auth0ConnectionName, scope: "openid profile email" },
+            });
+          }}
+        >
           Authorize {name} via Auth0
         </button>
         <button className="btn-cancel" onClick={onDismiss}>Dismiss</button>
@@ -172,10 +202,28 @@ function Sidebar({ connections, onClear }: {
   connections: { connection: string; connected: boolean }[];
   onClear: () => void;
 }) {
-  const { user, logout } = useAuth0();
+  const { user, logout, loginWithRedirect } = useAuth0();
   const slackConn = connections.find(c => c.connection === "slack");
   const notionConn = connections.find(c => c.connection === "notion");
   const discordConn = connections.find(c => c.connection === "discord");
+
+  const startConnectionAuth = (connection: "slack" | "notion" | "discord") => {
+    const auth0ConnectionName =
+      connection === "slack"
+        ? AUTH0_CONNECTIONS.slack
+        : connection === "discord"
+          ? AUTH0_CONNECTIONS.discord
+          : AUTH0_CONNECTIONS.notion;
+
+    console.log(`🔗 DEBUG: startConnectionAuth called for "${connection}"`);
+    console.log(`  -> Auth0 connection name being sent: "${auth0ConnectionName}"`);
+
+    sessionStorage.setItem("delegate:pending-connection", connection);
+
+    loginWithRedirect({
+      authorizationParams: { connection: auth0ConnectionName, scope: "openid profile email" },
+    });
+  };
 
   const perms = [
     { label: "Read Slack messages", granted: true },
@@ -207,9 +255,15 @@ function Sidebar({ connections, onClear }: {
             <div className="conn-name">Slack</div>
             <div className="conn-ws">workspace: acme-co</div>
           </div>
-          <span className={`conn-badge ${slackConn?.connected ? "badge-ok" : "badge-warn"}`}>
+          <button
+            type="button"
+            className={`conn-badge ${slackConn?.connected ? "badge-ok" : "badge-warn"}`}
+            onClick={() => !slackConn?.connected && startConnectionAuth("slack")}
+            disabled={!!slackConn?.connected}
+            title={slackConn?.connected ? "Slack connected" : "Connect Slack"}
+          >
             {slackConn?.connected ? "Connected" : "Connect ↗"}
-          </span>
+          </button>
         </div>
 
         <div className="conn-row">
@@ -218,9 +272,15 @@ function Sidebar({ connections, onClear }: {
             <div className="conn-name">Notion</div>
             <div className="conn-ws">workspace: personal</div>
           </div>
-          <span className={`conn-badge ${notionConn?.connected ? "badge-ok" : "badge-warn"}`}>
+          <button
+            type="button"
+            className={`conn-badge ${notionConn?.connected ? "badge-ok" : "badge-warn"}`}
+            onClick={() => !notionConn?.connected && startConnectionAuth("notion")}
+            disabled={!!notionConn?.connected}
+            title={notionConn?.connected ? "Notion connected" : "Connect Notion"}
+          >
             {notionConn?.connected ? "Connected" : "Connect ↗"}
-          </span>
+          </button>
         </div>
 
         <div className="conn-row">
@@ -229,9 +289,15 @@ function Sidebar({ connections, onClear }: {
             <div className="conn-name">Discord</div>
             <div className="conn-ws">workspace: servers</div>
           </div>
-          <span className={`conn-badge ${discordConn?.connected ? "badge-ok" : "badge-warn"}`}>
+          <button
+            type="button"
+            className={`conn-badge ${discordConn?.connected ? "badge-ok" : "badge-warn"}`}
+            onClick={() => !discordConn?.connected && startConnectionAuth("discord")}
+            disabled={!!discordConn?.connected}
+            title={discordConn?.connected ? "Discord connected" : "Connect Discord"}
+          >
             {discordConn?.connected ? "Connected" : "Connect ↗"}
-          </span>
+          </button>
         </div>
       </div>
 
@@ -275,12 +341,49 @@ export default function App() {
   const { messages, isStreaming, connections, sendMessage, fetchConnections, stop, clearMessages } = useAgent();
   const [input, setInput] = useState("");
   const [dismissedAuth, setDismissedAuth] = useState<Set<string>>(new Set());
+  const [authCallbackError, setAuthCallbackError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (isAuthenticated) fetchConnections();
+    if (!isAuthenticated) return;
+
+    fetchConnections();
+
+    const pending = sessionStorage.getItem("delegate:pending-connection");
+    if (!pending) return;
+
+    let attempts = 0;
+    const maxAttempts = 8;
+    const interval = window.setInterval(async () => {
+      attempts += 1;
+      await fetchConnections();
+
+      if (attempts >= maxAttempts) {
+        sessionStorage.removeItem("delegate:pending-connection");
+        window.clearInterval(interval);
+      }
+    }, 1500);
+
+    return () => window.clearInterval(interval);
   }, [isAuthenticated, fetchConnections]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("error");
+    const description = params.get("error_description");
+
+    if (!error) return;
+
+    const message = description
+      ? `${error}: ${description}`
+      : error;
+
+    setAuthCallbackError(message);
+
+    const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+    window.history.replaceState({}, document.title, cleanUrl);
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -326,6 +429,22 @@ export default function App() {
         <Sidebar connections={connections} onClear={clearMessages} />
 
         <main className="main">
+          {authCallbackError && (
+            <div className="auth-prompt" style={{ margin: "14px 28px 0" }}>
+              <div className="ap-title"><IconAuth /> Auth connection failed</div>
+              <p className="ap-body">
+                {authCallbackError}
+                {" "}
+                Make sure this connection is enabled for your Auth0 SPA application.
+              </p>
+              <div className="ap-btns">
+                <button className="btn-cancel" onClick={() => setAuthCallbackError(null)}>
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="chat-scroll">
             {messages.length === 0 && (
               <div className="empty-state">

@@ -213,6 +213,20 @@ function toolToConnection(toolName: string): VaultConnection | null {
   return null;
 }
 
+function isProviderAuthError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err ?? "");
+  return /(401|invalid_auth|not_authed|token|account_inactive|invalid token|unauthorized)/i.test(
+    message
+  );
+}
+
+function isSlackPermissionError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err ?? "");
+  return /(invalid_scope|missing_scope|not_allowed_token_type|insufficient_scope|scope)/i.test(
+    message
+  );
+}
+
 // ─── Tool execution ────────────────────────────────
 
 async function executeTool(
@@ -445,6 +459,41 @@ Today's date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: 
             role: "tool",
             name: toolName,
             content: `Error: ${err.message}`,
+          });
+        } else if (isProviderAuthError(err)) {
+          const connection = toolToConnection(toolName);
+          const message = err instanceof Error ? err.message : "Authorization failed";
+
+          if (connection === "slack" && isSlackPermissionError(err)) {
+            const guidance =
+              "Slack token is connected but missing required Web API scopes for this action. " +
+              "Update Auth0 Slack connection scopes (for example: channels:read channels:history groups:read groups:history chat:write users:read), " +
+              "then re-authorize Slack and try again.";
+
+            onEvent({ type: "tool_error", tool: toolName, error: `${message}. ${guidance}` });
+            toolResults.push({
+              tool_call_id: toolUse.id,
+              role: "tool",
+              name: toolName,
+              content: `Error: ${message}. ${guidance}`,
+            });
+            continue;
+          }
+
+          if (connection) {
+            onEvent({
+              type: "auth_required",
+              connection,
+              tool: toolName,
+            });
+          }
+
+          onEvent({ type: "tool_error", tool: toolName, error: message });
+          toolResults.push({
+            tool_call_id: toolUse.id,
+            role: "tool",
+            name: toolName,
+            content: `Error: ${message}`,
           });
         } else {
           const message = err instanceof Error ? err.message : "Unknown error";

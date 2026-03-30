@@ -31,7 +31,8 @@ agentRouter.get("/connections", checkJwt, async (req: Request, res: Response) =>
     res.json({ connections });
   } catch (err) {
     console.error("connections error:", err);
-    res.status(500).json({ error: "Failed to fetch connections" });
+    const message = err instanceof Error ? err.message : "Failed to fetch connections";
+    res.status(500).json({ error: message });
   }
 });
 
