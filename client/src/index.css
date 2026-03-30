@@ -155,6 +155,7 @@ body {
 }
 .slack-bg { background: #4a154b; }
 .notion-bg { background: #fff; }
+.discord-bg { background: #5865f2; }
 .conn-info { flex: 1; min-width: 0; }
 .conn-name { font-size: 11px; color: var(--text); }
 .conn-ws   { font-size: 10px; color: var(--sub2); }

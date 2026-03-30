@@ -13,7 +13,7 @@ import axios from "axios";
 const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN!;
 const MGMT_TOKEN = process.env.AUTH0_MGMT_TOKEN!;
 
-export type VaultConnection = "slack" | "notion";
+export type VaultConnection = "slack" | "notion" | "discord";
 
 export interface VaultToken {
   access_token: string;
@@ -80,7 +80,7 @@ export async function getUserConnections(
     headers: { Authorization: `Bearer ${MGMT_TOKEN}` },
   });
 
-  const connections: VaultConnection[] = ["slack", "notion"];
+  const connections: VaultConnection[] = ["slack", "notion", "discord"];
 
   return connections.map((c) => ({
     connection: c,

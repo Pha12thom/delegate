@@ -16,6 +16,7 @@ const IconStop = () => (
 );
 const IconSlack = () => <span style={{fontSize:"13px"}}>💬</span>;
 const IconNotion = () => <span style={{fontSize:"13px"}}>📄</span>;
+const IconDiscord = () => <span style={{fontSize:"13px"}}>🎮</span>;
 const IconAuth = () => <span style={{fontSize:"13px"}}>🔐</span>;
 const IconCheck = () => <span style={{fontSize:"11px", color:"#28c840"}}>✓</span>;
 const IconX = () => <span style={{fontSize:"11px", color:"#ff5f57"}}>✗</span>;
@@ -29,7 +30,7 @@ function AuthGate() {
     <div className="auth-gate">
       <div className="gate-card">
         <div className="gate-logo">Dele<span>gate</span></div>
-        <p className="gate-sub">Your AI agent for Slack &amp; Notion,<br/>secured by Auth0 Token Vault.</p>
+        <p className="gate-sub">Your AI agent for Slack, Notion, and Discord,<br/>secured by Auth0 Token Vault.</p>
         <button className="gate-btn" onClick={() => loginWithRedirect()}>
           Sign in with Auth0
         </button>
@@ -46,17 +47,24 @@ function AuthGate() {
 
 function ToolCard({ tc }: { tc: ToolCallEvent }) {
   const [open, setOpen] = useState(false);
-  const service = tc.tool.startsWith("slack") ? "slack" : "notion";
+  const service = tc.tool.startsWith("slack")
+    ? "slack"
+    : tc.tool.startsWith("discord")
+      ? "discord"
+      : "notion";
 
   const statusIcon =
     tc.status === "pending" ? <IconSpin /> :
     tc.status === "done"    ? <IconCheck /> :
                               <IconX />;
 
+  const serviceIcon =
+    service === "slack" ? <IconSlack /> : service === "discord" ? <IconDiscord /> : <IconNotion />;
+
   return (
     <div className={`tool-card tool-${tc.status}`}>
       <div className="tool-card-header" onClick={() => setOpen(o => !o)}>
-        <span className="tc-service">{service === "slack" ? <IconSlack /> : <IconNotion />}</span>
+        <span className="tc-service">{serviceIcon}</span>
         <span className="tc-name">{tc.tool.replace(/_/g," ")}</span>
         <span className="tc-status">{statusIcon}</span>
         <span className="tc-toggle">{open ? "▲" : "▼"}</span>
@@ -87,7 +95,7 @@ function ToolCard({ tc }: { tc: ToolCallEvent }) {
 
 function AuthPrompt({ connection, onDismiss }: { connection: string; onDismiss: () => void }) {
   const { loginWithRedirect } = useAuth0();
-  const Icon = connection === "slack" ? IconSlack : IconNotion;
+  const Icon = connection === "slack" ? IconSlack : connection === "discord" ? IconDiscord : IconNotion;
   const name = connection.charAt(0).toUpperCase() + connection.slice(1);
 
   return (
@@ -167,12 +175,15 @@ function Sidebar({ connections, onClear }: {
   const { user, logout } = useAuth0();
   const slackConn = connections.find(c => c.connection === "slack");
   const notionConn = connections.find(c => c.connection === "notion");
+  const discordConn = connections.find(c => c.connection === "discord");
 
   const perms = [
     { label: "Read Slack messages", granted: true },
     { label: "Post to Slack", granted: true },
     { label: "Read Notion pages", granted: !!notionConn?.connected },
     { label: "Create Notion pages", granted: !!notionConn?.connected },
+    { label: "Read Discord messages", granted: !!discordConn?.connected },
+    { label: "Post to Discord", granted: !!discordConn?.connected },
     { label: "Delete Slack messages", granted: false },
     { label: "Share Notion externally", granted: false },
   ];
@@ -180,7 +191,7 @@ function Sidebar({ connections, onClear }: {
   return (
     <aside className="sidebar">
       <div className="sb-section">
-        <div class="sb-label">Navigation</div>
+        <div className="sb-label">Navigation</div>
         <div className="nav-item active"><span>✦</span> Agent Chat</div>
         <div className="nav-item" onClick={onClear}><span>⊘</span> Clear Chat</div>
         <div className="nav-item"><span>◎</span> Activity Log</div>
@@ -209,6 +220,17 @@ function Sidebar({ connections, onClear }: {
           </div>
           <span className={`conn-badge ${notionConn?.connected ? "badge-ok" : "badge-warn"}`}>
             {notionConn?.connected ? "Connected" : "Connect ↗"}
+          </span>
+        </div>
+
+        <div className="conn-row">
+          <div className="conn-icon-wrap discord-bg"><IconDiscord /></div>
+          <div className="conn-info">
+            <div className="conn-name">Discord</div>
+            <div className="conn-ws">workspace: servers</div>
+          </div>
+          <span className={`conn-badge ${discordConn?.connected ? "badge-ok" : "badge-warn"}`}>
+            {discordConn?.connected ? "Connected" : "Connect ↗"}
           </span>
         </div>
       </div>

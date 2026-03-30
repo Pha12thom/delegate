@@ -92,7 +92,24 @@ export function useAgent() {
           signal: abort.signal,
         });
 
-        const reader = res.body!.getReader();
+        if (!res.ok) {
+          let errorMessage = `Chat request failed (${res.status})`;
+          try {
+            const data = await res.json();
+            if (data?.error) {
+              errorMessage = `Chat request failed (${res.status}): ${data.error}`;
+            }
+          } catch {
+            // ignore non-JSON error bodies
+          }
+          throw new Error(errorMessage);
+        }
+
+        if (!res.body) {
+          throw new Error("Chat stream did not start (empty response body)");
+        }
+
+        const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
 
@@ -122,7 +139,7 @@ export function useAgent() {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === agentMsgId
-                ? { ...m, content: "Something went wrong. Please try again." }
+                ? { ...m, content: err.message || "Something went wrong. Please try again." }
                 : m
             )
           );
