@@ -26,7 +26,7 @@ const TOOLS: any[] = [
   {
     name: "slack_list_channels",
     description:
-      "List Slack channels the user is a member of. Use this to discover available channels before fetching messages.",
+      "List Slack channels visible to the token, including membership status via is_member. Use this to discover where message read/post actions are possible.",
     input_schema: {
       type: "object" as const,
       properties: {},
@@ -352,12 +352,18 @@ You help users manage their work across Slack, Notion, and Discord.
 You have access to tools that let you read messages, post to channels, search pages, and create content.
 
 Guidelines:
-- Be concise and action-oriented
-- When reading messages, summarize the key points clearly
+- Always respond in natural language; never output raw JSON in your final reply
+- Keep replies concise, useful, and action-oriented
+- After tool calls, structure your reply as:
+  1) Outcome (1 line)
+  2) Key findings (short bullets)
+  3) Next best action (1 line)
+- When reading messages, summarize decisions, blockers, and urgent items first
 - When creating Notion pages, structure content with clear headings and bullets
-- Always confirm before posting to Slack or Discord (unless the user explicitly said to go ahead)
-- Surface urgent items first
-- If a tool fails due to missing auth, explain clearly what permission is needed
+- Always confirm before posting to Slack or Discord (unless user explicitly says to post now)
+- If a tool fails, explain why in plain English and provide a concrete next step
+- Avoid repeating the same tool call with identical input unless the previous result was incomplete
+- If channel access fails, explicitly ask the user which accessible channel to use from the visible list
 
 Today's date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`;
 
@@ -392,8 +398,20 @@ Today's date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: 
       });
 
       if (!res.ok) {
-        const error = (await res.json()) as any;
-        throw new Error(error.error?.message || `API error: ${res.status}`);
+        const rawBody = await res.text();
+        let providerMessage = `API error: ${res.status}`;
+        try {
+          const parsed = JSON.parse(rawBody) as any;
+          providerMessage =
+            parsed?.error?.message ||
+            parsed?.message ||
+            providerMessage;
+        } catch {
+          if (rawBody?.trim()) {
+            providerMessage = `${providerMessage} - ${rawBody.trim()}`;
+          }
+        }
+        throw new Error(providerMessage);
       }
 
       response = await res.json();
@@ -442,9 +460,8 @@ Today's date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: 
         const result = await executeTool(toolName, input, userId);
         onEvent({ type: "tool_result", tool: toolName, result });
         toolResults.push({
-          tool_call_id: toolUse.id,
           role: "tool",
-          name: toolName,
+          tool_call_id: toolUse.id,
           content: JSON.stringify(result),
         });
       } catch (err) {
@@ -455,9 +472,8 @@ Today's date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: 
             tool: toolName,
           });
           toolResults.push({
-            tool_call_id: toolUse.id,
             role: "tool",
-            name: toolName,
+            tool_call_id: toolUse.id,
             content: `Error: ${err.message}`,
           });
         } else if (isProviderAuthError(err)) {
@@ -472,9 +488,8 @@ Today's date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: 
 
             onEvent({ type: "tool_error", tool: toolName, error: `${message}. ${guidance}` });
             toolResults.push({
-              tool_call_id: toolUse.id,
               role: "tool",
-              name: toolName,
+              tool_call_id: toolUse.id,
               content: `Error: ${message}. ${guidance}`,
             });
             continue;
@@ -490,18 +505,16 @@ Today's date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: 
 
           onEvent({ type: "tool_error", tool: toolName, error: message });
           toolResults.push({
-            tool_call_id: toolUse.id,
             role: "tool",
-            name: toolName,
+            tool_call_id: toolUse.id,
             content: `Error: ${message}`,
           });
         } else {
           const message = err instanceof Error ? err.message : "Unknown error";
           onEvent({ type: "tool_error", tool: toolName, error: message });
           toolResults.push({
-            tool_call_id: toolUse.id,
             role: "tool",
-            name: toolName,
+            tool_call_id: toolUse.id,
             content: `Error: ${message}`,
           });
         }
@@ -509,10 +522,7 @@ Today's date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: 
     }
 
     // Add tool results to history and continue
-    currentMessages.push({
-      role: "user",
-      content: toolResults,
-    });
+    currentMessages.push(...toolResults);
   }
 
   onEvent({ type: "done" });

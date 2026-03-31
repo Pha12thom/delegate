@@ -23,6 +23,46 @@ export interface SlackChannel {
   num_members?: number;
 }
 
+function formatChannelPreview(channels: SlackChannel[], max = 5): string {
+  if (!channels.length) return "none";
+  const preview = channels.slice(0, max).map((c) => `#${c.name}`).join(", ");
+  return channels.length > max ? `${preview}, ...` : preview;
+}
+
+async function resolveChannelForAction(
+  token: string,
+  channelNameOrId: string,
+  action: "read messages" | "post messages"
+): Promise<{ id: string; name: string; is_member: boolean }> {
+  const channels = await listChannels(token);
+
+  const isChannelId = /^[CG]/.test(channelNameOrId);
+  const byId = isChannelId
+    ? channels.find((c) => c.id === channelNameOrId)
+    : null;
+
+  const normalizedName = channelNameOrId.replace(/^#/, "").toLowerCase();
+  const byName = !isChannelId
+    ? channels.find((c) => c.name.toLowerCase() === normalizedName)
+    : null;
+
+  const found = byId ?? byName;
+
+  if (!found) {
+    throw new Error(
+      `Channel ${channelNameOrId.startsWith("#") ? channelNameOrId : `#${channelNameOrId}`} not found. Visible channels: ${formatChannelPreview(channels)}.`
+    );
+  }
+
+  if (!found.is_member) {
+    throw new Error(
+      `I can see #${found.name}, but I'm not a member so I can't ${action}. Please invite the app/bot to #${found.name} and try again.`
+    );
+  }
+
+  return found;
+}
+
 /**
  * List channels the user is a member of.
  */
@@ -53,29 +93,42 @@ export async function getChannelMessages(
   const client = new WebClient(token);
   const { hoursBack = 24, limit = 50 } = options;
 
-  // Resolve channel name → ID if needed
-  let channelId = channelNameOrId;
-  if (!channelNameOrId.startsWith("C")) {
-    const name = channelNameOrId.replace(/^#/, "");
-    const channels = await listChannels(token);
-    const found = channels.find((c) => c.name === name);
-    if (!found) throw new Error(`Channel #${name} not found or not joined.`);
-    channelId = found.id;
-  }
+  const resolved = await resolveChannelForAction(
+    token,
+    channelNameOrId,
+    "read messages"
+  );
+  const channelId = resolved.id;
 
   const oldest = String(Date.now() / 1000 - hoursBack * 3600);
-  const result = await client.conversations.history({
-    channel: channelId,
-    oldest,
-    limit,
-    inclusive: true,
-  });
+  let result;
+  try {
+    result = await client.conversations.history({
+      channel: channelId,
+      oldest,
+      limit,
+      inclusive: true,
+    });
+  } catch (err: any) {
+    const code = err?.data?.error || err?.code || "unknown_error";
+    if (code === "not_in_channel") {
+      throw new Error(
+        `I can see #${resolved.name}, but I'm not in it. Invite the app/bot to #${resolved.name} and try again.`
+      );
+    }
+    if (code === "missing_scope") {
+      throw new Error(
+        "Slack token is missing required read scopes for this action. Please update Slack scopes and reconnect."
+      );
+    }
+    throw err;
+  }
 
   const messages = result.messages || [];
 
   // Resolve user IDs to display names
   const userCache: Record<string, string> = {};
-  const resolved = await Promise.all(
+  const resolvedMessages = await Promise.all(
     messages.map(async (m) => {
       if (m.user && !userCache[m.user]) {
         const info = await client.users.info({ user: m.user }).catch(() => null);
@@ -92,7 +145,7 @@ export async function getChannelMessages(
     })
   );
 
-  return resolved.reverse(); // chronological order
+  return resolvedMessages.reverse(); // chronological order
 }
 
 /**
@@ -106,20 +159,34 @@ export async function postMessage(
 ): Promise<{ ts: string; channel: string }> {
   const client = new WebClient(token);
 
-  let channelId = channelNameOrId;
-  if (!channelNameOrId.startsWith("C")) {
-    const name = channelNameOrId.replace(/^#/, "");
-    const channels = await listChannels(token);
-    const found = channels.find((c) => c.name === name);
-    if (!found) throw new Error(`Channel #${name} not found or not joined.`);
-    channelId = found.id;
-  }
+  const resolved = await resolveChannelForAction(
+    token,
+    channelNameOrId,
+    "post messages"
+  );
+  const channelId = resolved.id;
 
-  const result = await client.chat.postMessage({
-    channel: channelId,
-    text,
-    ...(options.blocks ? { blocks: options.blocks as any } : {}),
-  });
+  let result;
+  try {
+    result = await client.chat.postMessage({
+      channel: channelId,
+      text,
+      ...(options.blocks ? { blocks: options.blocks as any } : {}),
+    });
+  } catch (err: any) {
+    const code = err?.data?.error || err?.code || "unknown_error";
+    if (code === "not_in_channel") {
+      throw new Error(
+        `I can see #${resolved.name}, but I'm not in it yet. Invite the app/bot to #${resolved.name} and retry.`
+      );
+    }
+    if (code === "missing_scope") {
+      throw new Error(
+        "Slack token is missing required write scopes for this action. Please update Slack scopes and reconnect."
+      );
+    }
+    throw err;
+  }
 
   return { ts: result.ts!, channel: result.channel! };
 }
