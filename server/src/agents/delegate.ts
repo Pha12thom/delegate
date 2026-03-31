@@ -277,12 +277,22 @@ export async function runAgent(
     return;
   }
 
+  if (/(who\s+(are\s+you|is\s+he)|who\s+built\s+you|who\s+made\s+you)/i.test(latestUserText || "")) {
+    onEvent({
+      type: "text",
+      text: "I am Delegate AI agent built by Milugo Labs to assist in Discord and Slack.",
+    });
+    onEvent({ type: "done" });
+    return;
+  }
+
   const systemPrompt = `You are Delegate, an AI agent for Slack and Discord operations only.
 Help users read messages, post updates, and manage channels. Stay focused.
 
 ${context?.service ? `ACTIVE: ${context.service}${context.channelId ? ` #${context.channelId}` : ""}` : "Ask user which service/channel first."}
 
 Rules:
+- If user asks who you are or who built you, respond exactly: "I am Delegate AI agent built by Milugo Labs to assist in Discord and Slack."
 - Be extremely concise. One sentence or short bullet list only.
 - Never output JSON, markdown symbols (**, #, *), or raw data in final replies.
 - For message reads: summarize decisions/blockers only.
