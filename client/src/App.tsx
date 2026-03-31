@@ -108,7 +108,7 @@ function ToolCard({ tc }: { tc: ToolCallEvent }) {
 
 // ─── Auth Required Prompt ──────────────────────────
 
-function AuthPrompt({ connection, onDismiss }: { connection: string; onDismiss: () => void }) {
+function AuthPrompt({ connection, onDismiss, connections }: { connection: string; onDismiss: () => void; connections: { connection: string; connected: boolean }[] }) {
   const { loginWithRedirect } = useAuth0();
   const Icon = connection === "slack" ? IconSlack : connection === "discord" ? IconDiscord : IconNotion;
   const name = connection.charAt(0).toUpperCase() + connection.slice(1);
@@ -119,16 +119,32 @@ function AuthPrompt({ connection, onDismiss }: { connection: string; onDismiss: 
         ? AUTH0_CONNECTIONS.discord
         : AUTH0_CONNECTIONS.notion;
 
+  // Check if user has another service connected
+  const connectedOther = connections.find(c => c.connected && c.connection !== connection);
+  const hasOtherConnected = !!connectedOther;
+
   console.log(`🔐 DEBUG: AuthPrompt rendered for "${connection}"`);
   console.log(`  -> Auth0 connection name: "${auth0ConnectionName}"`);
+  console.log(`  -> Other service connected: ${connectedOther?.connection || "none"}`);
 
   return (
     <div className="auth-prompt">
-      <div className="ap-title"><IconAuth /> Auth0 Token Vault — Consent Required</div>
+      <div className="ap-title"><IconAuth /> Auth0 Token Vault — {hasOtherConnected ? "Switch Service" : "Connect Service"}</div>
       <p className="ap-body">
-        To use <strong>{name}</strong>, your vault needs a token.
-        Auth0 will handle the OAuth flow — your credentials stay encrypted in the vault.
-        Delegate only receives a scoped, time-limited access token.
+        {hasOtherConnected ? (
+          <>
+            You're currently connected to <strong>{connectedOther!.connection}</strong>.
+            To use <strong>{name}</strong>, I'll switch your vault token.
+            Auth0 will handle the OAuth flow — your credentials stay encrypted.
+            Delegate only receives a scoped, time-limited access token.
+          </>
+        ) : (
+          <>
+            To use <strong>{name}</strong>, your vault needs a token.
+            Auth0 will handle the OAuth flow — your credentials stay encrypted in the vault.
+            Delegate only receives a scoped, time-limited access token.
+          </>
+        )}
       </p>
       <div className="ap-btns">
         <button
@@ -140,7 +156,7 @@ function AuthPrompt({ connection, onDismiss }: { connection: string; onDismiss: 
             });
           }}
         >
-          Authorize {name} via Auth0
+          {hasOtherConnected ? `Switch to ${name}` : `Authorize ${name}`}
         </button>
         <button className="btn-cancel" onClick={onDismiss}>Dismiss</button>
       </div>
@@ -150,7 +166,7 @@ function AuthPrompt({ connection, onDismiss }: { connection: string; onDismiss: 
 
 // ─── Message Bubble ────────────────────────────────
 
-function MessageBubble({ msg, onDismissAuth }: { msg: ChatMessage; onDismissAuth: () => void }) {
+function MessageBubble({ msg, onDismissAuth, connections }: { msg: ChatMessage; onDismissAuth: () => void; connections: { connection: string; connected: boolean }[] }) {
   const isUser = msg.role === "user";
 
   return (
@@ -189,7 +205,7 @@ function MessageBubble({ msg, onDismissAuth }: { msg: ChatMessage; onDismissAuth
         )}
 
         {msg.authRequired && (
-          <AuthPrompt connection={msg.authRequired.connection} onDismiss={onDismissAuth} />
+          <AuthPrompt connection={msg.authRequired.connection} onDismiss={onDismissAuth} connections={connections || []} />
         )}
       </div>
     </div>
@@ -464,6 +480,7 @@ export default function App() {
                 key={msg.id}
                 msg={msg}
                 onDismissAuth={() => setDismissedAuth(s => new Set([...s, msg.id]))}
+                connections={connections}
               />
             ))}
             <div ref={bottomRef} />

@@ -236,8 +236,8 @@ async function executeTool(
 ): Promise<unknown> {
   const connection = toolToConnection(toolName);
 
-  // Fetch vault token for this service
-  const { access_token } = connection
+  // Fetch vault token for this service (Discord uses bot token, not OAuth)
+  const { access_token } = connection && connection !== "discord"
     ? await getVaultToken(userId, connection)
     : { access_token: "" };
 
@@ -280,11 +280,11 @@ async function executeTool(
       );
 
     case "discord_list_servers":
-      return await DiscordTools.listChannels(access_token);
+      return await DiscordTools.listChannels();
 
     case "discord_get_messages":
       return await DiscordTools.getChannelMessages(
-        access_token,
+        "",
         input.server_id as string,
         input.channel_id as string,
         {
@@ -295,14 +295,14 @@ async function executeTool(
 
     case "discord_post_message":
       return await DiscordTools.postMessage(
-        access_token,
+        "",
         input.channel_id as string,
         input.content as string
       );
 
     case "discord_get_server_info":
       return await DiscordTools.getServerInfo(
-        access_token,
+        "",
         input.server_id as string
       );
 
@@ -495,12 +495,26 @@ Today's date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: 
             continue;
           }
 
+          // Check if user has no vault token for this service
           if (connection) {
+            const notConnectedMsg =
+              message.toLowerCase().includes("not connected") || message.toLowerCase().includes("no") 
+                ? `You haven't connected ${connection} yet. Please authorize it to use this feature.`
+                : `${connection} connection error: ${message}`;
+
             onEvent({
               type: "auth_required",
               connection,
               tool: toolName,
             });
+
+            onEvent({ type: "tool_error", tool: toolName, error: notConnectedMsg });
+            toolResults.push({
+              role: "tool",
+              tool_call_id: toolUse.id,
+              content: `Error: ${notConnectedMsg}`,
+            });
+            continue;
           }
 
           onEvent({ type: "tool_error", tool: toolName, error: message });
