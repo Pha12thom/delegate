@@ -20,12 +20,14 @@ app.use(express.json());
 // ─── Routes ──────────────────────────────────────
 app.use("/api", agentRouter);
 
-// ─── Start ───────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n🔐 Delegate API running on http://localhost:${PORT}`);
-  console.log(`   Auth0 domain : ${process.env.AUTH0_DOMAIN}`);
-  console.log(`   Token Vault  : active`);
-  console.log(`   Tools        : slack, discord\n`);
-});
+// ─── Start (local runtime only) ──────────────────
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`\n🔐 Delegate API running on http://localhost:${PORT}`);
+    console.log(`   Auth0 domain : ${process.env.AUTH0_DOMAIN}`);
+    console.log(`   Token Vault  : active`);
+    console.log(`   Tools        : slack, discord\n`);
+  });
+}
 
 export default app;
