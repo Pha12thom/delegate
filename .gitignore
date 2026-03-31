@@ -6,4 +6,5 @@ dist/
 .DS_Store
 .vite/
 coverage/
-.env.example
+/server/.env.example
+/client/.env.example
