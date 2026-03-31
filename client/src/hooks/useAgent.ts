@@ -25,6 +25,12 @@ export interface AuthRequiredEvent {
   tool: string;
 }
 
+export interface MessageContext {
+  service?: "slack" | "discord";
+  workspaceId?: string;
+  channelId?: string;
+}
+
 export function useAgent() {
   const { getAccessTokenSilently } = useAuth0();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -32,6 +38,9 @@ export function useAgent() {
   const [connections, setConnections] = useState<
     { connection: string; connected: boolean }[]
   >([]);
+  const [context, setContext] = useState<MessageContext>({
+    service: "slack",
+  });
   const abortRef = useRef<AbortController | null>(null);
 
   const fetchConnections = useCallback(async () => {
@@ -102,7 +111,7 @@ export function useAgent() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ messages: history }),
+          body: JSON.stringify({ messages: history, context }),
           signal: abort.signal,
         });
 
@@ -241,6 +250,8 @@ export function useAgent() {
     messages,
     isStreaming,
     connections,
+    context,
+    setContext,
     sendMessage,
     fetchConnections,
     stop,

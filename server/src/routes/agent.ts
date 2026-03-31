@@ -47,6 +47,11 @@ const ChatSchema = z.object({
       content: z.string(),
     })
   ),
+  context: z.object({
+    service: z.enum(["slack", "discord"]).optional(),
+    workspaceId: z.string().optional(),
+    channelId: z.string().optional(),
+  }).optional(),
 });
 
 agentRouter.post("/chat", checkJwt, async (req: Request, res: Response) => {
@@ -57,7 +62,7 @@ agentRouter.post("/chat", checkJwt, async (req: Request, res: Response) => {
   }
 
   const userId = req.auth?.payload.sub!;
-  const { messages } = parsed.data;
+  const { messages, context } = parsed.data;
 
   // Set up SSE
   res.setHeader("Content-Type", "text/event-stream");
@@ -71,7 +76,7 @@ agentRouter.post("/chat", checkJwt, async (req: Request, res: Response) => {
   };
 
   try {
-    await runAgent(userId, messages, send);
+    await runAgent(userId, messages, send, context);
   } catch (err) {
     console.error("Agent error:", err);
     send({

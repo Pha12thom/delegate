@@ -359,6 +359,55 @@ body {
 }
 .btn-cancel:hover { border-color: var(--danger); color: var(--danger); }
 
+/* ── Context bar ──────────────────────────────── */
+.context-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  background: var(--raised);
+  border-radius: 8px;
+  border-left: 3px solid var(--accent2);
+  font-size: 12px;
+}
+
+.context-label {
+  color: var(--sub);
+  font-weight: 500;
+}
+
+.context-btn {
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.context-btn:hover {
+  border-color: var(--accent2);
+  color: var(--accent2);
+}
+
+.context-btn.active {
+  background: var(--accent2);
+  border-color: var(--accent2);
+  color: var(--bg);
+  font-weight: 500;
+}
+
+.context-info {
+  margin-left: auto;
+  color: var(--sub);
+  font-size: 11px;
+}
+
+.context-info strong {
+  color: var(--accent);
+}
+
 /* ── Input area ───────────────────────────────── */
 .input-area {
   border-top: 1px solid var(--border);

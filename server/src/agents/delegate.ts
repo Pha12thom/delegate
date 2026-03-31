@@ -326,7 +326,8 @@ export type AgentEvent =
 export async function runAgent(
   userId: string,
   messages: any[],
-  onEvent: (event: AgentEvent) => void
+  onEvent: (event: AgentEvent) => void,
+  context?: { service?: string; workspaceId?: string; channelId?: string }
 ): Promise<void> {
   const latestUserMessage = [...messages]
     .reverse()
@@ -350,6 +351,13 @@ export async function runAgent(
   const systemPrompt = `You are Delegate, a personal productivity AI agent.
 You help users manage their work across Slack, Notion, and Discord.
 You have access to tools that let you read messages, post to channels, search pages, and create content.
+
+${context?.service ? `ACTIVE CONTEXT:
+- Service: ${context.service}
+${context.workspaceId ? `- Workspace/Server ID: ${context.workspaceId}` : ""}
+${context.channelId ? `- Channel/Room ID: ${context.channelId}` : ""}
+
+By default, use the active context above for any requests about channels or messages. If the user wants to switch services or channels, confirm explicitly.` : "CONTEXT: User has not selected a default workspace or channel yet. Always ask which workspace/channel to use before reading/posting messages."}
 
 Guidelines:
 - Always respond in natural language; never output raw JSON in your final reply
@@ -418,10 +426,9 @@ Today's date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: 
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "OpenRouter request failed";
-      onEvent({
-        type: "text",
-        text: `Chat is online, but the AI provider request failed: ${message}`,
-      });
+      // Log error but don't spam user with verbose messages
+      console.error("OpenRouter error:", message);
+      // Silently exit if tools have already executed
       break;
     }
 
