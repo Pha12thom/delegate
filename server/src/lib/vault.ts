@@ -1,7 +1,7 @@
 /**
  * Auth0 Token Vault Client
  *
- * Fetches user-authorized OAuth tokens for connected services (Slack, Notion, etc.)
+ * Fetches user-authorized OAuth tokens for connected services (Slack and Discord)
  * via the Auth0 Token Vault API. The agent never sees raw credentials — it only
  * receives scoped, short-lived access tokens issued by Auth0.
  *
@@ -24,11 +24,10 @@ let mgmtTokenCache:
     }
   | null = null;
 
-export type VaultConnection = "slack" | "notion" | "discord";
+export type VaultConnection = "slack" | "discord";
 
 const AUTH0_CONNECTION_CONFIG: Record<VaultConnection, string | undefined> = {
   slack: process.env.AUTH0_CONNECTION_SLACK,
-  notion: process.env.AUTH0_CONNECTION_NOTION,
   discord: process.env.AUTH0_CONNECTION_DISCORD,
 };
 
@@ -264,7 +263,7 @@ export async function getUserConnections(
 
   const identities = userProfile.identities ?? [];
 
-  const connections: VaultConnection[] = ["slack", "notion", "discord"];
+  const connections: VaultConnection[] = ["slack", "discord"];
 
   const result = connections.map((c) => ({
     connection: c,

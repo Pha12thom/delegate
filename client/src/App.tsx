@@ -3,19 +3,13 @@ import { useAuth0 } from "@auth0/auth0-react";
 import { useAgent, ChatMessage, ToolCallEvent } from "./hooks/useAgent";
 
 const viteEnv = ((import.meta as any)?.env ?? {}) as Record<string, string | undefined>;
+const DISCORD_INSTALL_URL = "https://discord.com/oauth2/authorize?client_id=1488419745194836011&scope=bot%20applications.commands&permissions=66560";
+const SLACK_INSTALL_URL = "https://api.slack.com/apps";
 
 const AUTH0_CONNECTIONS = {
   slack: viteEnv.VITE_AUTH0_CONNECTION_SLACK || "sign-in-with-slack",
-  notion: viteEnv.VITE_AUTH0_CONNECTION_NOTION || "notion",
   discord: viteEnv.VITE_AUTH0_CONNECTION_DISCORD || "discord",
 } as const;
-
-// ─── DEBUG: Log env vars and connections ────
-console.log("🔧 DEBUG: Vite Env Variables:");
-console.log("  VITE_AUTH0_CONNECTION_SLACK:", viteEnv.VITE_AUTH0_CONNECTION_SLACK);
-console.log("  VITE_AUTH0_CONNECTION_NOTION:", viteEnv.VITE_AUTH0_CONNECTION_NOTION);
-console.log("  VITE_AUTH0_CONNECTION_DISCORD:", viteEnv.VITE_AUTH0_CONNECTION_DISCORD);
-console.log("🔧 DEBUG: AUTH0_CONNECTIONS object:", AUTH0_CONNECTIONS);
 
 // ─── Icons (inline SVG components) ────────────────
 
@@ -30,7 +24,6 @@ const IconStop = () => (
   </svg>
 );
 const IconSlack = () => <span style={{fontSize:"13px"}}>💬</span>;
-const IconNotion = () => <span style={{fontSize:"13px"}}>📄</span>;
 const IconDiscord = () => <span style={{fontSize:"13px"}}>🎮</span>;
 const IconAuth = () => <span style={{fontSize:"13px"}}>🔐</span>;
 const IconCheck = () => <span style={{fontSize:"11px", color:"#28c840"}}>✓</span>;
@@ -45,7 +38,7 @@ function AuthGate() {
     <div className="auth-gate">
       <div className="gate-card">
         <div className="gate-logo">Dele<span>gate</span></div>
-        <p className="gate-sub">Your AI agent for Slack, Notion, and Discord,<br/>secured by Auth0 Token Vault.</p>
+        <p className="gate-sub">Your AI agent for Slack and Discord,<br/>secured by Auth0 Token Vault.</p>
         <button className="gate-btn" onClick={() => loginWithRedirect()}>
           Sign in with Auth0
         </button>
@@ -64,17 +57,14 @@ function ToolCard({ tc }: { tc: ToolCallEvent }) {
   const [open, setOpen] = useState(false);
   const service = tc.tool.startsWith("slack")
     ? "slack"
-    : tc.tool.startsWith("discord")
-      ? "discord"
-      : "notion";
+    : "discord";
 
   const statusIcon =
     tc.status === "pending" ? <IconSpin /> :
     tc.status === "done"    ? <IconCheck /> :
                               <IconX />;
 
-  const serviceIcon =
-    service === "slack" ? <IconSlack /> : service === "discord" ? <IconDiscord /> : <IconNotion />;
+  const serviceIcon = service === "slack" ? <IconSlack /> : <IconDiscord />;
 
   return (
     <div className={`tool-card tool-${tc.status}`}>
@@ -110,22 +100,16 @@ function ToolCard({ tc }: { tc: ToolCallEvent }) {
 
 function AuthPrompt({ connection, onDismiss, connections }: { connection: string; onDismiss: () => void; connections: { connection: string; connected: boolean }[] }) {
   const { loginWithRedirect } = useAuth0();
-  const Icon = connection === "slack" ? IconSlack : connection === "discord" ? IconDiscord : IconNotion;
+  const Icon = connection === "slack" ? IconSlack : IconDiscord;
   const name = connection.charAt(0).toUpperCase() + connection.slice(1);
   const auth0ConnectionName =
     connection === "slack"
       ? AUTH0_CONNECTIONS.slack
-      : connection === "discord"
-        ? AUTH0_CONNECTIONS.discord
-        : AUTH0_CONNECTIONS.notion;
+      : AUTH0_CONNECTIONS.discord;
 
   // Check if user has another service connected
   const connectedOther = connections.find(c => c.connected && c.connection !== connection);
   const hasOtherConnected = !!connectedOther;
-
-  console.log(`🔐 DEBUG: AuthPrompt rendered for "${connection}"`);
-  console.log(`  -> Auth0 connection name: "${auth0ConnectionName}"`);
-  console.log(`  -> Other service connected: ${connectedOther?.connection || "none"}`);
 
   return (
     <div className="auth-prompt">
@@ -145,8 +129,23 @@ function AuthPrompt({ connection, onDismiss, connections }: { connection: string
             Delegate only receives a scoped, time-limited access token.
           </>
         )}
+        {connection === "discord" && (
+          <>
+            <br />
+            <br />
+            If Delegate is not yet installed in your Discord server, install it first.
+          </>
+        )}
       </p>
       <div className="ap-btns">
+        {connection === "discord" && (
+          <button
+            className="btn-cancel"
+            onClick={() => window.open(DISCORD_INSTALL_URL, "_blank", "noopener,noreferrer")}
+          >
+            Install Delegate to Discord
+          </button>
+        )}
         <button
           className="btn-approve"
           onClick={() => {
@@ -164,6 +163,88 @@ function AuthPrompt({ connection, onDismiss, connections }: { connection: string
   );
 }
 
+function renderInlineMarkdown(text: string) {
+  const parts = text
+    .split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g)
+    .filter(Boolean);
+
+  return parts.map((part, idx) => {
+    if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
+      return <code key={idx} className="msg-inline-code">{part.slice(1, -1)}</code>;
+    }
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return <strong key={idx}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
+      return <em key={idx}>{part.slice(1, -1)}</em>;
+    }
+    return <span key={idx}>{part}</span>;
+  });
+}
+
+function renderMessageContent(content: string) {
+  const lines = content.split("\n");
+  const nodes: JSX.Element[] = [];
+  let bullets: string[] = [];
+
+  const flushBullets = () => {
+    if (!bullets.length) return;
+    nodes.push(
+      <ul key={`ul-${nodes.length}`} className="msg-list">
+        {bullets.map((item, idx) => (
+          <li key={idx}>{renderInlineMarkdown(item)}</li>
+        ))}
+      </ul>
+    );
+    bullets = [];
+  };
+
+  lines.forEach((rawLine) => {
+    const line = rawLine.trim();
+
+    if (!line) {
+      flushBullets();
+      return;
+    }
+
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      flushBullets();
+      const level = heading[1].length;
+      const text = heading[2];
+      const className = level === 1 ? "msg-h1" : level === 2 ? "msg-h2" : "msg-h3";
+      nodes.push(
+        <div key={`h-${nodes.length}`} className={className}>
+          {renderInlineMarkdown(text)}
+        </div>
+      );
+      return;
+    }
+
+    const bullet = line.match(/^[-•]\s+(.+)$/);
+    if (bullet) {
+      bullets.push(bullet[1]);
+      return;
+    }
+
+    const numbered = line.match(/^\d+[\.)]\s+(.+)$/);
+    if (numbered) {
+      bullets.push(numbered[1]);
+      return;
+    }
+
+    flushBullets();
+    nodes.push(
+      <p key={`p-${nodes.length}`} className="msg-p">
+        {renderInlineMarkdown(line)}
+      </p>
+    );
+  });
+
+  flushBullets();
+  return nodes;
+}
+
 // ─── Message Bubble ────────────────────────────────
 
 function MessageBubble({ msg, onDismissAuth, connections }: { msg: ChatMessage; onDismissAuth: () => void; connections: { connection: string; connected: boolean }[] }) {
@@ -178,7 +259,7 @@ function MessageBubble({ msg, onDismissAuth, connections }: { msg: ChatMessage; 
         <div className="msg-sender">
           {isUser ? "You" : "Delegate · Agent"}
           <span className="msg-time">
-            {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            {(msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </span>
         </div>
 
@@ -192,9 +273,7 @@ function MessageBubble({ msg, onDismissAuth, connections }: { msg: ChatMessage; 
 
         {msg.content && (
           <div className={`bubble ${isUser ? "bubble-user" : "bubble-agent"}`}>
-            {msg.content.split("\n").map((line, i) => (
-              <span key={i}>{line}{i < msg.content.split("\n").length - 1 && <br/>}</span>
-            ))}
+            {renderMessageContent(msg.content)}
           </div>
         )}
 
@@ -214,25 +293,22 @@ function MessageBubble({ msg, onDismissAuth, connections }: { msg: ChatMessage; 
 
 // ─── Sidebar ───────────────────────────────────────
 
-function Sidebar({ connections, onClear }: {
+function Sidebar({ connections, context, setContext, onClear, onClose }: {
   connections: { connection: string; connected: boolean }[];
+  context: { service?: "slack" | "discord"; workspaceId?: string; channelId?: string };
+  setContext: (ctx: { service?: "slack" | "discord"; workspaceId?: string; channelId?: string }) => void;
   onClear: () => void;
+  onClose?: () => void;
 }) {
   const { user, logout, loginWithRedirect } = useAuth0();
   const slackConn = connections.find(c => c.connection === "slack");
-  const notionConn = connections.find(c => c.connection === "notion");
   const discordConn = connections.find(c => c.connection === "discord");
 
-  const startConnectionAuth = (connection: "slack" | "notion" | "discord") => {
+  const startConnectionAuth = (connection: "slack" | "discord") => {
     const auth0ConnectionName =
       connection === "slack"
         ? AUTH0_CONNECTIONS.slack
-        : connection === "discord"
-          ? AUTH0_CONNECTIONS.discord
-          : AUTH0_CONNECTIONS.notion;
-
-    console.log(`🔗 DEBUG: startConnectionAuth called for "${connection}"`);
-    console.log(`  -> Auth0 connection name being sent: "${auth0ConnectionName}"`);
+        : AUTH0_CONNECTIONS.discord;
 
     sessionStorage.setItem("delegate:pending-connection", connection);
 
@@ -242,24 +318,39 @@ function Sidebar({ connections, onClear }: {
   };
 
   const perms = [
-    { label: "Read Slack messages", granted: true },
-    { label: "Post to Slack", granted: true },
-    { label: "Read Notion pages", granted: !!notionConn?.connected },
-    { label: "Create Notion pages", granted: !!notionConn?.connected },
+    { label: "Read Slack messages", granted: !!slackConn?.connected },
+    { label: "Post to Slack", granted: !!slackConn?.connected },
     { label: "Read Discord messages", granted: !!discordConn?.connected },
     { label: "Post to Discord", granted: !!discordConn?.connected },
     { label: "Delete Slack messages", granted: false },
-    { label: "Share Notion externally", granted: false },
+    { label: "Manage Discord roles", granted: false },
   ];
 
   return (
     <aside className="sidebar">
+      {onClose && <button className="sb-close" onClick={onClose}>✕</button>}
       <div className="sb-section">
         <div className="sb-label">Navigation</div>
         <div className="nav-item active"><span>✦</span> Agent Chat</div>
         <div className="nav-item" onClick={onClear}><span>⊘</span> Clear Chat</div>
-        <div className="nav-item"><span>◎</span> Activity Log</div>
-        <div className="nav-item"><span>⚙</span> Settings</div>
+      </div>
+
+      <div className="sb-section">
+        <div className="sb-label">Active Service</div>
+        <div className="service-toggle-wrap">
+          <button
+            className={`service-toggle ${context?.service === "slack" ? "active" : ""}`}
+            onClick={() => setContext({ ...context, service: "slack" })}
+          >
+            <IconSlack /> Slack
+          </button>
+          <button
+            className={`service-toggle ${context?.service === "discord" ? "active" : ""}`}
+            onClick={() => setContext({ ...context, service: "discord" })}
+          >
+            <IconDiscord /> Discord
+          </button>
+        </div>
       </div>
 
       <div className="sb-section">
@@ -271,32 +362,35 @@ function Sidebar({ connections, onClear }: {
             <div className="conn-name">Slack</div>
             <div className="conn-ws">workspace: acme-co</div>
           </div>
-          <button
-            type="button"
-            className={`conn-badge ${slackConn?.connected ? "badge-ok" : "badge-warn"}`}
-            onClick={() => !slackConn?.connected && startConnectionAuth("slack")}
-            disabled={!!slackConn?.connected}
-            title={slackConn?.connected ? "Slack connected" : "Connect Slack"}
-          >
-            {slackConn?.connected ? "Connected" : "Connect ↗"}
-          </button>
-        </div>
-
-        <div className="conn-row">
-          <div className="conn-icon-wrap notion-bg"><IconNotion /></div>
-          <div className="conn-info">
-            <div className="conn-name">Notion</div>
-            <div className="conn-ws">workspace: personal</div>
-          </div>
-          <button
-            type="button"
-            className={`conn-badge ${notionConn?.connected ? "badge-ok" : "badge-warn"}`}
-            onClick={() => !notionConn?.connected && startConnectionAuth("notion")}
-            disabled={!!notionConn?.connected}
-            title={notionConn?.connected ? "Notion connected" : "Connect Notion"}
-          >
-            {notionConn?.connected ? "Connected" : "Connect ↗"}
-          </button>
+          {!slackConn?.connected ? (
+            <div className="conn-actions">
+              <button
+                type="button"
+                className="conn-badge badge-warn"
+                onClick={() => window.open(SLACK_INSTALL_URL, "_blank", "noopener,noreferrer")}
+                title="Create/install Slack app"
+              >
+                Install ↗
+              </button>
+              <button
+                type="button"
+                className="conn-badge badge-warn"
+                onClick={() => startConnectionAuth("slack")}
+                title="Connect Slack OAuth"
+              >
+                Connect ↗
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="conn-badge badge-ok"
+              disabled
+              title="Slack connected"
+            >
+              Connected
+            </button>
+          )}
         </div>
 
         <div className="conn-row">
@@ -305,15 +399,70 @@ function Sidebar({ connections, onClear }: {
             <div className="conn-name">Discord</div>
             <div className="conn-ws">workspace: servers</div>
           </div>
-          <button
-            type="button"
-            className={`conn-badge ${discordConn?.connected ? "badge-ok" : "badge-warn"}`}
-            onClick={() => !discordConn?.connected && startConnectionAuth("discord")}
-            disabled={!!discordConn?.connected}
-            title={discordConn?.connected ? "Discord connected" : "Connect Discord"}
-          >
-            {discordConn?.connected ? "Connected" : "Connect ↗"}
-          </button>
+          {!discordConn?.connected ? (
+            <div className="conn-actions">
+              <button
+                type="button"
+                className="conn-badge badge-warn"
+                onClick={() => window.open(DISCORD_INSTALL_URL, "_blank", "noopener,noreferrer")}
+                title="Install Delegate bot to Discord"
+              >
+                Install ↗
+              </button>
+              <button
+                type="button"
+                className="conn-badge badge-warn"
+                onClick={() => startConnectionAuth("discord")}
+                title="Connect Discord OAuth"
+              >
+                Connect ↗
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="conn-badge badge-ok"
+              disabled
+              title="Discord connected"
+            >
+              Connected
+            </button>
+          )}
+        </div>
+
+        <div className="install-card">
+          <div className="install-title">Install Delegate</div>
+          <details className="install-menu" open>
+            <summary><IconSlack /> Slack setup</summary>
+            <ol>
+              <li>Create or open your Slack app from Slack API.</li>
+              <li>Install it to your workspace.</li>
+              <li>Come back and click Connect for Slack.</li>
+            </ol>
+            <button
+              type="button"
+              className="install-btn"
+              onClick={() => window.open(SLACK_INSTALL_URL, "_blank", "noopener,noreferrer")}
+            >
+              Open Slack App Setup ↗
+            </button>
+          </details>
+
+          <details className="install-menu" open>
+            <summary><IconDiscord /> Discord setup</summary>
+            <ol>
+              <li>Install Delegate bot to your server.</li>
+              <li>Grant read history + send message permissions.</li>
+              <li>Come back and click Connect for Discord.</li>
+            </ol>
+            <button
+              type="button"
+              className="install-btn"
+              onClick={() => window.open(DISCORD_INSTALL_URL, "_blank", "noopener,noreferrer")}
+            >
+              Install Delegate to Discord ↗
+            </button>
+          </details>
         </div>
       </div>
 
@@ -344,22 +493,37 @@ function Sidebar({ connections, onClear }: {
 
 // ─── Main App ──────────────────────────────────────
 
-const HINTS = [
+const ALL_HINTS = [
   "Summarize #eng-alerts from last 24h",
   "Draft my standup from Slack activity",
-  "Create a Notion page with today's digest",
+  "List my Discord servers and channels",
   "What's urgent in #product this week?",
   "Post a status update to #general",
+  "Check latest messages in #announcements",
+  "Get a summary of team discussions",
+  "Show recent activity across channels",
 ];
+
+function getRandomHints(count: number = 3): string[] {
+  const shuffled = [...ALL_HINTS].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
 
 export default function App() {
   const { isLoading, isAuthenticated, user } = useAuth0();
-  const { messages, isStreaming, connections, sendMessage, fetchConnections, stop, clearMessages } = useAgent();
+  const { messages, isStreaming, connections, context, setContext, sendMessage, fetchConnections, stop, clearMessages } = useAgent();
   const [input, setInput] = useState("");
   const [dismissedAuth, setDismissedAuth] = useState<Set<string>>(new Set());
   const [authCallbackError, setAuthCallbackError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [hints, setHints] = useState<string[]>(getRandomHints());
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Refresh hints when active context changes
+  useEffect(() => {
+    setHints(getRandomHints());
+  }, [context?.service]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -441,10 +605,12 @@ export default function App() {
         </div>
       </header>
 
-      <div className="body-row">
-        <Sidebar connections={connections} onClear={clearMessages} />
+      <div className={`body-row ${sidebarOpen ? "with-sidebar" : "no-sidebar"}`}>
+        {sidebarOpen && <Sidebar connections={connections} context={context} setContext={setContext} onClear={clearMessages} onClose={() => setSidebarOpen(false)} />}
+        {sidebarOpen && <button className="mobile-overlay" onClick={() => setSidebarOpen(false)} aria-label="Close menu" />}
 
         <main className="main">
+          {!sidebarOpen && <button className="sidebar-toggle-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">⋯</button>}
           {authCallbackError && (
             <div className="auth-prompt" style={{ margin: "14px 28px 0" }}>
               <div className="ap-title"><IconAuth /> Auth connection failed</div>
@@ -466,9 +632,9 @@ export default function App() {
               <div className="empty-state">
                 <div className="es-mark">✦</div>
                 <div className="es-title">What should I handle?</div>
-                <div className="es-sub">Ask me to read Slack, summarize threads, or create Notion pages.</div>
+                <div className="es-sub">Ask me to read or post to Slack and Discord channels.</div>
                 <div className="es-hints">
-                  {HINTS.map(h => (
+                  {hints.map(h => (
                     <button key={h} className="hint-chip" onClick={() => sendMessage(h)}>{h}</button>
                   ))}
                 </div>
@@ -506,7 +672,7 @@ export default function App() {
               )}
             </div>
             <div className="input-footer">
-              Delegate can read/post Slack · read/write Notion · powered by Claude + Auth0
+              Delegate can read/post Slack and Discord · powered by OpenRouter + Auth0
             </div>
           </div>
         </main>

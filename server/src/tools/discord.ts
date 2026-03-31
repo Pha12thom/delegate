@@ -21,6 +21,16 @@ function makeBotHeaders(): Record<string, string> {
   };
 }
 
+function normalizeOutboundText(text: string): string {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
+}
+
 export async function listChannels(): Promise<unknown> {
   if (!BOT_TOKEN) {
     throw new Error("DISCORD_BOT_TOKEN not configured. Cannot list Discord guilds.");
@@ -103,13 +113,15 @@ export async function postMessage(
     throw new Error("DISCORD_BOT_TOKEN not configured. Cannot post Discord messages.");
   }
 
+  const normalizedContent = normalizeOutboundText(content);
+
   try {
     const res = await fetch(
       `https://discord.com/api/v10/channels/${channelId}/messages`,
       {
         method: "POST",
         headers: makeBotHeaders(),
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content: normalizedContent }),
       }
     );
 

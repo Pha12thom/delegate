@@ -23,6 +23,16 @@ export interface SlackChannel {
   num_members?: number;
 }
 
+function normalizeOutboundText(text: string): string {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
+}
+
 function formatChannelPreview(channels: SlackChannel[], max = 5): string {
   if (!channels.length) return "none";
   const preview = channels.slice(0, max).map((c) => `#${c.name}`).join(", ");
@@ -158,6 +168,7 @@ export async function postMessage(
   options: { blocks?: object[] } = {}
 ): Promise<{ ts: string; channel: string }> {
   const client = new WebClient(token);
+  const normalizedText = normalizeOutboundText(text);
 
   const resolved = await resolveChannelForAction(
     token,
@@ -170,7 +181,7 @@ export async function postMessage(
   try {
     result = await client.chat.postMessage({
       channel: channelId,
-      text,
+      text: normalizedText,
       ...(options.blocks ? { blocks: options.blocks as any } : {}),
     });
   } catch (err: any) {

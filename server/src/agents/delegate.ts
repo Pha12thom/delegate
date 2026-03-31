@@ -11,7 +11,6 @@
 
 import { getVaultToken, VaultTokenError, VaultConnection } from "../lib/vault";
 import * as SlackTools from "../tools/slack";
-import * as NotionTools from "../tools/notion";
 import * as DiscordTools from "../tools/discord";
 
 const rawOpenRouterKey = process.env.OPENROUTER_API_KEY?.trim();
@@ -72,58 +71,6 @@ const TOOLS: any[] = [
         },
       },
       required: ["channel", "text"],
-    },
-  },
-  {
-    name: "notion_search_pages",
-    description: "Search for Notion pages by title or keyword.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        query: {
-          type: "string",
-          description: "Search query string",
-        },
-      },
-      required: ["query"],
-    },
-  },
-  {
-    name: "notion_create_page",
-    description:
-      "Create a new Notion page with a title and content. Content can include markdown-style headings (# ## ###), bullets (- or •), and paragraphs.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        title: {
-          type: "string",
-          description: "Page title",
-        },
-        content: {
-          type: "string",
-          description:
-            "Page content. Use # for headings, - for bullets, plain text for paragraphs.",
-        },
-        parent_page_id: {
-          type: "string",
-          description: "Optional parent page ID to nest the new page under",
-        },
-      },
-      required: ["title", "content"],
-    },
-  },
-  {
-    name: "notion_get_page",
-    description: "Retrieve the text content of a Notion page by its ID.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        page_id: {
-          type: "string",
-          description: "Notion page ID",
-        },
-      },
-      required: ["page_id"],
     },
   },
   {
@@ -208,7 +155,6 @@ const OPENROUTER_TOOLS = TOOLS.map((tool) => ({
 
 function toolToConnection(toolName: string): VaultConnection | null {
   if (toolName.startsWith("slack_")) return "slack";
-  if (toolName.startsWith("notion_")) return "notion";
   if (toolName.startsWith("discord_")) return "discord";
   return null;
 }
@@ -260,23 +206,6 @@ async function executeTool(
         access_token,
         input.channel as string,
         input.text as string
-      );
-
-    case "notion_search_pages":
-      return await NotionTools.searchPages(access_token, input.query as string);
-
-    case "notion_create_page":
-      return await NotionTools.createPage(
-        access_token,
-        input.title as string,
-        input.content as string,
-        { parentPageId: input.parent_page_id as string | undefined }
-      );
-
-    case "notion_get_page":
-      return await NotionTools.getPageContent(
-        access_token,
-        input.page_id as string
       );
 
     case "discord_list_servers":
@@ -348,35 +277,25 @@ export async function runAgent(
     return;
   }
 
-  const systemPrompt = `You are Delegate, a personal productivity AI agent.
-You help users manage their work across Slack, Notion, and Discord.
-You have access to tools that let you read messages, post to channels, search pages, and create content.
+  const systemPrompt = `You are Delegate, an AI agent for Slack and Discord operations only.
+Help users read messages, post updates, and manage channels. Stay focused.
 
-${context?.service ? `ACTIVE CONTEXT:
-- Service: ${context.service}
-${context.workspaceId ? `- Workspace/Server ID: ${context.workspaceId}` : ""}
-${context.channelId ? `- Channel/Room ID: ${context.channelId}` : ""}
+${context?.service ? `ACTIVE: ${context.service}${context.channelId ? ` #${context.channelId}` : ""}` : "Ask user which service/channel first."}
 
-By default, use the active context above for any requests about channels or messages. If the user wants to switch services or channels, confirm explicitly.` : "CONTEXT: User has not selected a default workspace or channel yet. Always ask which workspace/channel to use before reading/posting messages."}
+Rules:
+- Be extremely concise. One sentence or short bullet list only.
+- Never output JSON, markdown symbols (**, #, *), or raw data in final replies.
+- For message reads: summarize decisions/blockers only.
+- For posts: ask "Ready to post?" unless user says "post now"
+- Skip pleasantries and explanations. Go straight to results.
+- If tool fails, one line reason + next step.
+- This chat auto-clears after 3 hours to save space.
 
-Guidelines:
-- Always respond in natural language; never output raw JSON in your final reply
-- Keep replies concise, useful, and action-oriented
-- After tool calls, structure your reply as:
-  1) Outcome (1 line)
-  2) Key findings (short bullets)
-  3) Next best action (1 line)
-- When reading messages, summarize decisions, blockers, and urgent items first
-- When creating Notion pages, structure content with clear headings and bullets
-- Always confirm before posting to Slack or Discord (unless user explicitly says to post now)
-- If a tool fails, explain why in plain English and provide a concrete next step
-- Avoid repeating the same tool call with identical input unless the previous result was incomplete
-- If channel access fails, explicitly ask the user which accessible channel to use from the visible list
-
-Today's date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`;
+Date: ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+`;
 
   let currentMessages: any[] = [...messages];
-  let iterations = 0;
+  let iterations = 0; 
   const MAX_ITERATIONS = 10;
 
   while (iterations < MAX_ITERATIONS) {

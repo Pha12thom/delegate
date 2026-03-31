@@ -25,7 +25,7 @@ app.listen(PORT, () => {
   console.log(`\n🔐 Delegate API running on http://localhost:${PORT}`);
   console.log(`   Auth0 domain : ${process.env.AUTH0_DOMAIN}`);
   console.log(`   Token Vault  : active`);
-  console.log(`   Tools        : slack, notion\n`);
+  console.log(`   Tools        : slack, discord\n`);
 });
 
 export default app;
