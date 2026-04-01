@@ -11,3 +11,4 @@ client/.env.example
 /server/.env
 /client/.env
 .env.example
+.env.main
