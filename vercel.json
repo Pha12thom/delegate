@@ -3,7 +3,7 @@
   "buildCommand": "npm --prefix client run build",
   "outputDirectory": "client/dist",
   "functions": {
-    "api/index.ts": {
+    "api/**/*.ts": {
       "maxDuration": 60
     }
   }
