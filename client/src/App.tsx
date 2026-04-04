@@ -520,6 +520,21 @@ export default function App() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 769px)");
+
+    const handleViewportChange = (event: MediaQueryListEvent | MediaQueryList) => {
+      if (event.matches) {
+        setSidebarOpen(true);
+      }
+    };
+
+    handleViewportChange(media);
+
+    media.addEventListener("change", handleViewportChange);
+    return () => media.removeEventListener("change", handleViewportChange);
+  }, []);
+
   // Refresh hints when active context changes
   useEffect(() => {
     setHints(getRandomHints());
