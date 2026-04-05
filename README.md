@@ -1,292 +1,157 @@
-# Delegate — AI Agent for Slack & Notion
+# Delegate
 
-> A personal productivity AI agent that acts on your behalf across Slack and Notion,  
-> secured by **Auth0 Token Vault** — your credentials never touch the agent.
+Delegate is an AI agent for Slack and Discord secured by Auth0 Token Vault. It lets a user sign in, connect services, and ask the agent to read messages, summarize activity, and perform approved actions on their behalf.
 
----
+## Features
 
-## What It Does
+- Auth0 login and secure delegated access
+- Slack and Discord service connections
+- Token Vault-based token retrieval
+- Streaming chat UI with tool-call visibility
+- Server-side agent execution with SSE responses
+- Vercel-ready deployment for the frontend and API routes
 
-Delegate is a Claude-powered agent with a chat interface. You talk to it in plain English:
+## How it works
 
-- **"Summarize #eng-alerts from the last 24 hours"** → reads Slack, returns a digest
-- **"Create a Notion page with today's highlights"** → Auth0 issues a scoped token, page is created
-- **"Post a standup update to #general"** → drafts from your Slack activity, posts with your approval
-- **"What's urgent in #product this week?"** → surfaces action items, flags blockers
+1. The user signs in with Auth0.
+2. The user connects Slack or Discord through Auth0.
+3. The backend retrieves the stored access token from Auth0 Token Vault.
+4. The agent uses that token to call the service API.
+5. Results stream back to the client in real time.
 
-The key differentiator: **Auth0 Token Vault handles all OAuth flows**. The agent receives short-lived, scoped tokens — it never sees your Slack or Notion credentials.
+## Project structure
 
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                      Browser (React)                     │
-│  Auth0 SDK → gets JWT → sends with every API request    │
-└────────────────────┬────────────────────────────────────┘
-                     │ HTTPS + Bearer JWT
-┌────────────────────▼────────────────────────────────────┐
-│              Express API  (Node.js / TypeScript)         │
-│                                                          │
-│  1. Validates JWT via Auth0                              │
-│  2. Runs Claude agent loop (tool use)                    │
-│  3. Per tool call → fetches vault token from Auth0       │
-│  4. Executes Slack / Notion API with that token          │
-│  5. Streams results back via SSE                         │
-└──────────┬──────────────────────────┬───────────────────┘
-           │                          │
-    ┌──────▼──────┐           ┌───────▼──────┐
-    │  Auth0      │           │  Anthropic   │
-    │  Token Vault│           │  Claude API  │
-    │  (OAuth     │           │  (claude-    │
-    │  tokens for │           │  opus-4-5)   │
-    │  Slack &    │           └──────────────┘
-    │  Notion)    │
-    └─────────────┘
-```
-
-### Auth0 Token Vault Flow
-
-```
-User logs in with Auth0
-    ↓
-User authorizes Slack connection (Auth0 Social Connection)
-    ↓
-Auth0 stores the Slack OAuth token encrypted in Token Vault
-    ↓
-Agent wants to read Slack:
-    → Server calls Auth0 Management API: GET /api/v2/users/{id}/identities
-    → Auth0 returns the stored access_token for the Slack identity
-    → Agent uses that token to call Slack API
-    → Token is never stored server-side, never logged
-```
-
----
-
-## Project Structure
-
-```
+```text
 delegate/
-├── package.json              # Workspace root
+├── api/
+│   └── index.ts
+├── client/
+│   ├── src/
+│   │   ├── App.tsx
+│   │   ├── main.tsx
+│   │   ├── index.css
+│   │   └── hooks/useAgent.ts
+│   ├── package.json
+│   └── vite.config.ts
 ├── server/
 │   ├── src/
-│   │   ├── index.ts          # Express entry point
-│   │   ├── lib/
-│   │   │   └── vault.ts      # Auth0 Token Vault client
-│   │   ├── agents/
-│   │   │   └── delegate.ts   # Claude agent loop + tool definitions
-│   │   ├── tools/
-│   │   │   ├── slack.ts      # Slack API wrapper
-│   │   │   └── notion.ts     # Notion API wrapper
-│   │   └── routes/
-│   │       └── agent.ts      # Express routes + SSE streaming
-│   ├── .env.example
+│   │   ├── index.ts
+│   │   ├── agents/delegate.ts
+│   │   ├── lib/vault.ts
+│   │   ├── routes/agent.ts
+│   │   └── tools/
 │   ├── package.json
 │   └── tsconfig.json
-└── client/
-    ├── src/
-    │   ├── main.tsx           # Auth0Provider setup
-    │   ├── App.tsx            # Main UI
-    │   ├── index.css          # Global styles
-    │   └── hooks/
-    │       └── useAgent.ts    # SSE streaming hook
-    ├── index.html
-    ├── .env.example
-    ├── package.json
-    └── vite.config.ts
+├── package.json
+├── package-lock.json
+└── vercel.json
 ```
 
----
-
-## Setup
-
-### Prerequisites
+## Prerequisites
 
 - Node.js 20+
-- An [Auth0](https://auth0.com) account (free tier works)
-- An [Anthropic](https://console.anthropic.com) API key
-- A Slack app with OAuth scopes
-- A Notion OAuth integration
+- Auth0 tenant
+- Slack app credentials
+- Discord app credentials or bot token
+- OpenRouter API key
 
----
-
-### 1. Clone & Install
+## Install
 
 ```bash
-git clone https://github.com/your-handle/delegate
-cd delegate
 npm install
 ```
 
----
+## Environment files
 
-### 2. Auth0 Setup
+Use separate env files:
 
-#### A. Create an Auth0 Application
+- [server/.env](server/.env)
+- [client/.env](client/.env)
 
-1. Go to **Auth0 Dashboard → Applications → Create Application**
-2. Choose **Single Page Application**
-3. Set **Allowed Callback URLs**: `http://localhost:5173, http://127.0.0.1:5173`
-4. Set **Allowed Logout URLs**: `http://localhost:5173, http://127.0.0.1:5173`
-5. Set **Allowed Web Origins**: `http://localhost:5173, http://127.0.0.1:5173`
-6. Note your **Domain** and **Client ID**
+Server env should contain:
 
-> Use this SPA application's client ID for `VITE_AUTH0_CLIENT_ID` in `client/.env`.
+- `AUTH0_DOMAIN`
+- `AUTH0_AUDIENCE`
+- `AUTH0_CONNECTION_SLACK`
+- `AUTH0_CONNECTION_DISCORD`
+- `AUTH0_MGMT_TOKEN` or `AUTH0_M2M_CLIENT_ID` + `AUTH0_M2M_CLIENT_SECRET`
+- `OPENROUTER_API_KEY`
+- `SLACK_CLIENT_ID`
+- `SLACK_CLIENT_SECRET`
+- `SLACK_SIGNING_SECRET`
+- `SLACK_APP_TOKEN`
+- `DISCORD_CLIENT_ID`
+- `DISCORD_CLIENT_SECRET`
+- `DISCORD_BOT_TOKEN`
+- `CLIENT_URL`
+- `PORT`
 
-#### B. Create an API (for server JWT validation)
+Client env should contain:
 
-1. Go to **Auth0 Dashboard → APIs → Create API**
-2. Set identifier to `https://your-tenant.auth0.com/api/v2/`
-3. This is your `AUTH0_AUDIENCE`
+- `VITE_AUTH0_DOMAIN`
+- `VITE_AUTH0_CLIENT_ID`
+- `VITE_AUTH0_AUDIENCE`
+- `VITE_API_URL`
+- `VITE_AUTH0_CONNECTION_SLACK`
+- `VITE_AUTH0_CONNECTION_DISCORD`
 
-#### C. Set Up Slack Social Connection (Token Vault)
-
-1. Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps)
-2. Under **OAuth & Permissions**, add scopes:
-   - `channels:history`, `channels:read`, `chat:write`, `users:read`
-3. Set redirect URL to: `https://your-tenant.auth0.com/login/callback`
-4. Note the **Client ID** and **Client Secret**
-5. In Auth0: **Authentication → Social → Create Connection → Slack**
-6. Enter your Slack Client ID and Secret
-7. Enable the connection on your application
-8. Under **Advanced → Token Vault**: enable **Store User Access Token**
-
-#### D. Set Up Notion Social Connection (Token Vault)
-
-1. Create a Notion integration at [notion.so/my-integrations](https://www.notion.so/my-integrations)
-2. Choose **Public integration** with OAuth
-3. Set redirect URI: `https://your-tenant.auth0.com/login/callback`
-4. Note the **OAuth Client ID** and **Secret**
-5. In Auth0: **Authentication → Social → Create Connection → Notion**
-6. Enter your Notion credentials
-7. Enable on your application
-8. Under **Advanced → Token Vault**: enable **Store User Access Token**
-
-#### E. Get a Management API Token
-
-For the server to read vault tokens, it needs a Management API token:
-
-1. Go to **Auth0 Dashboard → APIs → Auth0 Management API → API Explorer**
-2. Click **Get Token** (or use Machine-to-Machine app)
-3. Ensure scopes include: `read:users`, `read:user_idp_tokens`
-4. Copy the token → `AUTH0_MGMT_TOKEN` in your server `.env`
-
-> **Production note**: Use a Machine-to-Machine app with client credentials flow
-> instead of a static management token. Rotate regularly.
->
-> Keep M2M credentials server-side only. Do **not** put M2M client IDs/secrets in `client/.env`.
-
----
-
-### 3. Environment Variables
-
-```bash
-# Server
-cp server/.env.example server/.env
-# Fill in: AUTH0_DOMAIN, AUTH0_AUDIENCE, AUTH0_MGMT_TOKEN,
-#          AUTH0_M2M_CLIENT_ID, AUTH0_M2M_CLIENT_SECRET, ANTHROPIC_API_KEY
-
-# Client
-cp client/.env.example client/.env
-# Fill in: VITE_AUTH0_DOMAIN, VITE_AUTH0_CLIENT_ID (SPA app), VITE_AUTH0_AUDIENCE
-```
-
----
-
-### 4. Run Locally
+## Run locally
 
 ```bash
 npm run dev
 ```
 
-- Client: [http://localhost:5173](http://localhost:5173)
-- Server: [http://localhost:3001](http://localhost:3001)
+Default local URLs:
 
----
+- Client: http://localhost:5173
+- Server: http://localhost:3001
+
+## Build
+
+```bash
+npm run build
+```
 
 ## Deployment
 
-### Server → Railway / Render
+### Vercel
 
-```bash
-# Set all env vars in your Railway/Render dashboard
-# Build command:
-npm run build --workspace=server
+This repo is set up for Vercel with:
 
-# Start command:
-npm run start --workspace=server
-```
+- build command: `npm run build`
+- output directory: `client/dist`
+- API routes under `api/`
 
-### Client → Vercel
+Set production environment variables in the Vercel project dashboard, then redeploy.
 
-```bash
-cd client
-vercel deploy
-# Set VITE_AUTH0_* env vars in Vercel dashboard
-# Update Auth0 callback/logout URLs to your Vercel domain
-```
+### Auth0 production settings
 
----
+Add your deployed domain to:
 
-## How Token Vault Works (The Important Part)
+- Allowed Callback URLs
+- Allowed Logout URLs
+- Allowed Web Origins
 
-Token Vault is the core of this project's security model. Here's what happens at runtime:
+## Using the app
 
-```typescript
-// In delegate.ts, before every tool call:
-const { access_token } = await getVaultToken(userId, "slack");
-//                                            ^^^^^^^^^^^^^^
-//           Auth0 Management API → decrypts stored OAuth token
-//           Returns short-lived access token scoped to what user authorized
-//           Agent code NEVER stores this token
+1. Sign in with Auth0.
+2. Connect Slack or Discord.
+3. Wait for connections to show as connected.
+4. Ask the agent to summarize, read, or post.
+5. Approve any auth prompt if the service needs access.
 
-const messages = await SlackTools.getChannelMessages(access_token, "#eng-alerts");
-```
+## Troubleshooting
 
-If the user hasn't authorized a connection yet, `getVaultToken` throws a `VaultTokenError`. The agent catches this, emits an `auth_required` event, and the UI shows the Auth0 consent prompt — no credentials ever enter the agent's context.
+- If `/api/chat` returns 404, check Vercel routing and the deployed API function.
+- If a service stays disconnected, verify the Auth0 connection is enabled for the SPA app.
+- If build fails, confirm the Vercel install/build commands match the repo workspace layout.
+- If the desktop sidebar disappears, refresh on desktop or resize the window after the sidebar auto-open fix.
 
----
+## Notes
 
-## Extending with More Tools
-
-Add a new tool in 3 steps:
-
-**1. Write the tool** (`server/src/tools/github.ts`):
-```typescript
-export async function listPRs(token: string, repo: string) { ... }
-```
-
-**2. Add to the agent** (`server/src/agents/delegate.ts`):
-```typescript
-// Add to TOOLS array:
-{ name: "github_list_prs", description: "...", input_schema: { ... } }
-
-// Add to toolToConnection():
-if (toolName.startsWith("github_")) return "github";
-
-// Add to executeTool():
-case "github_list_prs": return await GitHubTools.listPRs(access_token, input.repo as string);
-```
-
-**3. Add the Auth0 Social Connection** for GitHub in your Auth0 dashboard with Token Vault enabled.
-
-That's it — Auth0 handles the OAuth, vault stores the token, agent uses it.
-
----
-
-## Judging Notes (Hackathon)
-
-| Requirement | Implementation |
-|---|---|
-| Uses Token Vault | `server/src/lib/vault.ts` — all tokens fetched via Auth0 Management API |
-| Auth0 handles OAuth | Users connect Slack/Notion via Auth0 Social Connections |
-| Agent acts on behalf of user | Claude tool-use loop in `server/src/agents/delegate.ts` |
-| Consent delegation | `auth_required` events surface Auth0 consent UI in the chat |
-| Scoped permissions | Sidebar shows exact granted/denied permissions per service |
-| Published app | Deployed on Vercel + Railway |
-
----
+- The app uses OpenRouter in the current implementation.
+- Token Vault keeps user OAuth tokens out of the agent and server code paths.
+- Do not commit secrets to the repository.
 
 ## License
 
